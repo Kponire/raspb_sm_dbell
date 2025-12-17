@@ -6,6 +6,9 @@ import threading
 import time
 import requests
 from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class FaceDetector:
     def __init__(self, prototxt_path="models/deploy.prototxt", 

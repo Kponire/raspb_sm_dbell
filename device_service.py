@@ -11,11 +11,14 @@ import os
 from datetime import datetime
 import requests
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class DeviceService:
     def __init__(self, device_id, base_url):
-        self.device_id = device_id
-        self.base_url = base_url
+        self.device_id = device_id if device_id else os.getenv('DEVICE_ID')
+        self.base_url = base_url if base_url else os.getenv('BACKEND_URL')
         
         # Initialize components
         self.camera = Camera(resolution=(640, 480), framerate=15)
