@@ -339,3 +339,15 @@ class DeviceService:
             self.camera.stop()
             self.lcd.clear()
             print("[INFO] Device service stopped")
+
+
+if __name__ == "__main__":
+    DEVICE_ID = os.getenv("DEVICE_ID", "raspberrypi-doorbell-001")
+    BASE_URL = os.getenv("BACKEND_URL", "https://loadless-nubia-overjealous.ngrok-free.dev")
+
+    service = DeviceService(
+        device_id=DEVICE_ID,
+        base_url=BASE_URL
+    )
+
+    service.start()
