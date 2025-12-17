@@ -85,6 +85,7 @@ class Recognizer:
             # List files in the device's folder in images bucket
             if self.device_id:
                 items = self.sup.storage.from_('images').list(path=self.device_id)
+                print(f"[DEBUG] Supabase items: {items}")
             else:
                 # Fallback: list all images (not recommended for production)
                 items = self.sup.storage.from_('images').list()
@@ -104,7 +105,7 @@ class Recognizer:
                 try:
                     # Get signed URL for the image
                     signed = self.sup.storage.from_('images').create_signed_url(path, 3600)
-                    url = signed.get('signedURL')
+                    url = signed.get('signed_url') or signed.get('signedURL')
                     
                     if not url:
                         print(f"[WARN] No URL for {path}")
