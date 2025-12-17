@@ -26,10 +26,10 @@ class APIClient:
         self.stream_thread = threading.Thread(target=self._stream_frames, daemon=True)
         self.sio = socketio.Client(
             reconnection=True,
-            reconnection_attempts=0,
-            reconnection_delay=2,
-            transports=["websocket"]
+            reconnection_attempts=5,
+            reconnection_delay=1
         )
+
 
         
         # Register device
