@@ -1,7 +1,6 @@
-"""Hardware abstraction for Raspberry Pi: relays, buzzer, LCD, button.
-Provides safe fallbacks for non-Raspberry environments for testing on desktop.
-"""
 import os
+import time
+
 try:
     import RPi.GPIO as GPIO
     from RPLCD.i2c import CharLCD
@@ -10,12 +9,16 @@ except Exception:
     REAL_GPIO = False
 
 
+if REAL_GPIO:
+    GPIO.setmode(GPIO.BCM)
+    GPIO.setwarnings(False)
+
+
 class Relay:
     def __init__(self, pin: int):
         self.pin = pin
         if REAL_GPIO:
-            GPIO.setup(self.pin, GPIO.OUT)
-            GPIO.output(self.pin, GPIO.LOW)
+            GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
 
     def open(self):
         if REAL_GPIO:
@@ -29,12 +32,12 @@ class Relay:
         else:
             print(f"[HARDWARE SIM] Relay {self.pin} CLOSE")
 
+
 class YellowIndicator:
     def __init__(self, pin: int):
         self.pin = pin
         if REAL_GPIO:
-            GPIO.setup(self.pin, GPIO.OUT)
-            GPIO.output(self.pin, GPIO.LOW)
+            GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
 
     def on(self):
         if REAL_GPIO:
@@ -48,12 +51,20 @@ class YellowIndicator:
         else:
             print(f"[HARDWARE SIM] Yellow Indicator {self.pin} OFF")
 
+    def blink(self, interval=0.5):
+        if REAL_GPIO:
+            GPIO.output(self.pin, GPIO.HIGH)
+            time.sleep(interval)
+            GPIO.output(self.pin, GPIO.LOW)
+        else:
+            print(f"[HARDWARE SIM] Yellow Indicator {self.pin} BLINK")
+
+
 class RedIndicator:
     def __init__(self, pin: int):
         self.pin = pin
         if REAL_GPIO:
-            GPIO.setup(self.pin, GPIO.OUT)
-            GPIO.output(self.pin, GPIO.LOW)
+            GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
 
     def on(self):
         if REAL_GPIO:
@@ -72,29 +83,48 @@ class Buzzer:
     def __init__(self, pin: int):
         self.pin = pin
         if REAL_GPIO:
-            GPIO.setup(self.pin, GPIO.OUT)
+            GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
 
-    def beep(self, ms: int = 100):
+    def beep(self, ms: int = 100, repeat: int = 1):
         if REAL_GPIO:
-            GPIO.output(self.pin, GPIO.HIGH)
-            GPIO.delay(ms)
-            GPIO.output(self.pin, GPIO.LOW)
+            for _ in range(repeat):
+                GPIO.output(self.pin, GPIO.HIGH)
+                time.sleep(ms / 1000)
+                GPIO.output(self.pin, GPIO.LOW)
+                time.sleep(0.05)
         else:
-            print(f"[HARDWARE SIM] Buzzer beep {ms}ms")
+            print(f"[HARDWARE SIM] Buzzer beep {ms}ms x{repeat}")
 
 
 class LCD:
     def __init__(self):
-        self.ADDRESS = 0x27 
-        self.PORT = 1 # Use 0 for older Raspberry Pi models
-        self.COLS = 16 
-        self.ROWS = 2 
-        self.CHARMAP = 'A00'
-        self.I2C_EXPANDER = 'PCF8574'
-        self.lcd = CharLCD(self.I2C_EXPANDER, self.ADDRESS, port=self.PORT, charmap=self.CHARMAP, cols=self.COLS, rows=self.ROWS)
+        if not REAL_GPIO:
+            print("[HARDWARE SIM] LCD initialized")
+            return
 
-    def display(self, text: str):
-        self.lcd.write_string(text)
+        self.lcd = CharLCD(
+            i2c_expander='PCF8574',
+            address=0x27,
+            port=1,
+            cols=16,
+            rows=2,
+            charmap='A00'
+        )
+
+    def display(self, line1: str, line2: str = ""):
+        if REAL_GPIO:
+            self.lcd.clear()
+            self.lcd.write_string(line1[:16])
+            if line2:
+                self.lcd.cursor_pos = (1, 0)
+                self.lcd.write_string(line2[:16])
+        else:
+            print(f"[LCD] {line1} | {line2}")
+
+    def clear(self):
+        if REAL_GPIO:
+            self.lcd.clear()
+
 
 class Button:
     def __init__(self, pin: int):
@@ -106,3 +136,9 @@ class Button:
         if REAL_GPIO:
             return GPIO.input(self.pin) == GPIO.HIGH
         return False
+
+
+def cleanup():
+    """Call on shutdown"""
+    if REAL_GPIO:
+        GPIO.cleanup()
