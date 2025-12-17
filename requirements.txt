@@ -1,0 +1,11 @@
+flask
+requests
+deepface
+picamera2
+opencv-python-headless
+numpy
+requests
+supabase
+psycopg2-binary
+RPi.GPIO; platform_system == 'Linux'
+gpiozero; platform_system == 'Linux'
