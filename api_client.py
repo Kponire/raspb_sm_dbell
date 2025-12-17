@@ -7,6 +7,7 @@ import time
 import queue
 import cv2
 import numpy as np
+import socketio
 
 class APIClient:
     def __init__(self, base_url, device_id, device_name="Raspberry Pi"):
@@ -23,6 +24,13 @@ class APIClient:
         # Start background threads
         self.door_monitor_thread = threading.Thread(target=self._monitor_door_state, daemon=True)
         self.stream_thread = threading.Thread(target=self._stream_frames, daemon=True)
+        self.sio = socketio.Client(
+            reconnection=True,
+            reconnection_attempts=0,
+            reconnection_delay=2,
+            transports=["websocket"]
+        )
+
         
         # Register device
         self._register_device()
@@ -157,9 +165,6 @@ class APIClient:
                 time.sleep(check_interval)
     
     def _stream_frames(self):
-        stream_url = f"{self.base_url}/api/video/stream/{self.device_id}/frame"
-        failures = 0
-
         while self.stream_active:
             try:
                 if self.frame_queue.empty():
@@ -167,32 +172,19 @@ class APIClient:
                     continue
 
                 frame_bytes = self.frame_queue.get_nowait()
-                files = {'frame': ('frame.jpg', frame_bytes, 'image/jpeg')}
 
-                response = requests.post(
-                    stream_url,
-                    files=files,
-                    timeout=7
+                self.sio.emit(
+                    "video_frame",
+                    {
+                        "deviceId": self.device_id,
+                        "frame": frame_bytes
+                    },
+                    binary=True
                 )
 
-                if response.status_code != 200:
-                    failures += 1
-                    print(f"[WARN] Frame upload failed: {response.status_code}")
-                else:
-                    failures = 0
-
-            except requests.exceptions.Timeout:
-                failures += 1
-                print("[WARN] Streaming timeout")
-
             except Exception as e:
-                failures += 1
-                print(f"[ERROR] Streaming error: {e}")
-
-            if failures >= 5:
-                print("[WARN] Streaming paused due to network instability")
-                time.sleep(5)
-                failures = 0
+                print(f"[WS ERROR] {e}")
+                time.sleep(1)
     
     def send_notification(self, status, image_data=None, image_url=None, confidence=None, person_name=None):
         """Send notification to backend"""
@@ -231,26 +223,37 @@ class APIClient:
         except Exception as e:
             print(f"[ERROR] Failed to send notification: {e}")
             return False
+
+    def connect_stream(self):
+        ws_url = self.base_url.replace("https://", "wss://").replace("http://", "ws://")
+        
+        self.sio.connect(
+            f"{ws_url}/ws/video",
+            transports=["websocket"]
+        )
+
+        self.sio.emit("register_device", {
+            "deviceId": self.device_id
+        })
+
+        print("[WS] Connected to video stream")
+
     
     def start_streaming(self):
         if self.stream_active:
             return
 
         self.stream_active = True
-        self.stream_thread = threading.Thread(
-            target=self._stream_frames,
-            daemon=True
-        )
-        self.stream_thread.start()
+        self.connect_stream()
+        print("[INFO] WebSocket streaming started")
 
-        print(f"[INFO] Started streaming to {self.base_url}")
     
     def stop_streaming(self):
-        """Stop streaming"""
         self.stream_active = False
-        if self.stream_thread.is_alive():
-            self.stream_thread.join(timeout=2)
-        print("[INFO] Stopped streaming")
+        if self.sio.connected:
+            self.sio.disconnect()
+        print("[INFO] WebSocket streaming stopped")
+
     
     def queue_frame(self, frame):
         """Queue a frame for streaming"""
