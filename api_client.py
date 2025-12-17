@@ -115,70 +115,84 @@ class APIClient:
             print(f"[ERROR] Device registration error: {e}")
     
     def _monitor_door_state(self):
-        """Background thread to monitor door state changes"""
-        check_interval = 1.0
-        
+        """Background thread to monitor door state changes (robust)"""
+        check_interval = 3.0
+        max_failures = 5
+        failures = 0
+
         while True:
             try:
                 response = requests.get(
                     f"{self.base_url}/api/door/state/device/{self.device_id}",
-                    timeout=3
+                    timeout=5
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     new_state = data.get('state', 'locked')
-                    
+
                     with self.door_state_lock:
                         if new_state != self.door_state:
                             print(f"[INFO] Door state changed: {self.door_state} -> {new_state}")
                             self.door_state = new_state
-                    
+
                     self.last_door_check = datetime.utcnow()
+                    failures = 0
                 else:
-                    print(f"[WARN] Failed to get door state: {response.status_code}")
-                    
+                    print(f"[WARN] Door state fetch failed: {response.status_code}")
+
+            except requests.exceptions.Timeout:
+                failures += 1
+                print(f"[WARN] Door state timeout ({failures}/{max_failures})")
+
             except Exception as e:
+                failures += 1
                 print(f"[ERROR] Door state monitoring error: {e}")
-            
-            time.sleep(check_interval)
+
+            if failures >= max_failures:
+                print("[WARN] Door state monitoring paused (network unstable)")
+                time.sleep(10)
+                failures = 0
+            else:
+                time.sleep(check_interval)
     
     def _stream_frames(self):
-        """Background thread to stream frames to backend"""
         stream_url = f"{self.base_url}/api/video/stream/{self.device_id}/frame"
-        
+        failures = 0
+
         while self.stream_active:
             try:
                 if self.frame_queue.empty():
-                    time.sleep(0.01)
+                    time.sleep(0.05)
                     continue
-                
-                # Get frame from queue
+
                 frame_bytes = self.frame_queue.get_nowait()
-                
-                # Prepare multipart form data
                 files = {'frame': ('frame.jpg', frame_bytes, 'image/jpeg')}
-                
-                # Send frame
+
                 response = requests.post(
                     stream_url,
                     files=files,
-                    timeout=5
+                    timeout=7
                 )
-                
+
                 if response.status_code != 200:
+                    failures += 1
                     print(f"[WARN] Frame upload failed: {response.status_code}")
-                    # Re-add frame to queue if it failed
-                    if self.frame_queue.qsize() < 5:
-                        self.frame_queue.put(frame_bytes)
-                
-                time.sleep(0.1)
-                
-            except queue.Empty:
-                continue
+                else:
+                    failures = 0
+
+            except requests.exceptions.Timeout:
+                failures += 1
+                print("[WARN] Streaming timeout")
+
             except Exception as e:
+                failures += 1
                 print(f"[ERROR] Streaming error: {e}")
-                time.sleep(1)
+
+            if failures >= 5:
+                print("[WARN] Streaming paused due to network instability")
+                time.sleep(5)
+                failures = 0
     
     def send_notification(self, status, image_data=None, image_url=None, confidence=None, person_name=None):
         """Send notification to backend"""
@@ -219,11 +233,17 @@ class APIClient:
             return False
     
     def start_streaming(self):
-        """Start streaming frames to backend"""
-        if not self.stream_active:
-            self.stream_active = True
-            self.stream_thread.start()
-            print(f"[INFO] Started streaming to {self.base_url}")
+        if self.stream_active:
+            return
+
+        self.stream_active = True
+        self.stream_thread = threading.Thread(
+            target=self._stream_frames,
+            daemon=True
+        )
+        self.stream_thread.start()
+
+        print(f"[INFO] Started streaming to {self.base_url}")
     
     def stop_streaming(self):
         """Stop streaming"""

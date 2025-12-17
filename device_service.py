@@ -343,7 +343,7 @@ class DeviceService:
 
 if __name__ == "__main__":
     DEVICE_ID = os.getenv("DEVICE_ID", "raspberrypi-doorbell-001")
-    BASE_URL = os.getenv("BACKEND_URL", "https://loadless-nubia-overjealous.ngrok-free.dev")
+    BASE_URL = os.getenv("BACKEND_URL", "https://rasp-sm-dbell-web-vrs.onrender.com")
 
     service = DeviceService(
         device_id=DEVICE_ID,
