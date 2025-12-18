@@ -315,5 +315,5 @@ api_client = None
 def init_api_client(base_url, device_id, device_name="Raspberry Pi"):
     global api_client
     api_client = APIClient(base_url, device_id, device_name)
-    api_client.start_door_monitoring()
+    # api_client.start_door_monitoring()
     return api_client

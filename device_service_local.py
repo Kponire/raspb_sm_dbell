@@ -42,6 +42,7 @@ class DeviceServiceLocal:
         # State
         self.processing = False
         self.last_button_press = 0
+        self.local_door_state = "locked"
 
         self._init_api_client()
         self._start_gallery_builder()
@@ -120,21 +121,28 @@ class DeviceServiceLocal:
         name = info.get("name", "Unknown")
         conf = info.get("confidence", 0)
 
+        print(f"[INFO] Recognized: {name} ({conf:.2f})")
         self.lcd.display("Welcome", name[:16])
+
         self.capture_and_upload(frame, name, "recognized")
 
-        if api_client.get_door_state() == "unlocked":
-            self.relay.open()
-            self.yellow.on()
-            self.buzzer.beep(100)
-            time.sleep(5)
-            self.relay.close()
-            self.yellow.off()
-        else:
+        if self.local_door_state == "locked":
             self.red.on()
             self.buzzer.beep(200)
+            self.lcd.display("Door Locked", "Access Denied")
             time.sleep(2)
             self.red.off()
+            return
+
+        self.relay.open()
+        self.yellow.on()
+        self.buzzer.beep(100)
+        self.lcd.display("Access Granted", "Door Open")
+        time.sleep(5)
+        self.relay.close()
+        self.yellow.off()
+        self.lcd.display("Door Locked", "Ready")
+
 
     def handle_unrecognized(self, frame):
         self.lcd.display("Access Denied", "Unknown")
