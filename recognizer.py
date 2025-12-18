@@ -107,14 +107,14 @@ class Recognizer:
                     # Get signed URL for the image
                     print("[DEBUG] Getting signed URL")
                     signed = self.sup.storage.from_('images').create_signed_url(path, 3600)
-                    url = signed.get('signed_url') or signed.get('signedURL')
+                    url = None #signed.get('signed_url') or signed.get('signedURL')
                     
                     if not url:
                         print(f"[WARN] No URL for {path}")
                         continue
                     
                     # Download image
-                    resp = requests.get(url, timeout=10)
+                    resp = requests.get(url, timeout=3)
                     resp.raise_for_status()
                     img_bytes = resp.content
                     
