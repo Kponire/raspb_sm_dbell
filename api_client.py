@@ -124,8 +124,7 @@ class APIClient:
             try:
                 response = requests.get(
                     f"{self.base_url}/api/door/state/device/{self.device_id}",
-                    timeout=5,
-                    verify=False
+                    timeout=5
                 )
 
                 if response.status_code == 200:

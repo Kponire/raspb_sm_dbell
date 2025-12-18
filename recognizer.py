@@ -96,6 +96,7 @@ class Recognizer:
             
             for obj in items:
                 path = obj.get('name')
+                path = self.device_id + '/' + path
                 print(f"[DEBUG] Processing image: {path}")
                 
                 # Skip if not in device folder (when device_id is not set)

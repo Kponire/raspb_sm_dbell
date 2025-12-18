@@ -52,7 +52,10 @@ class DeviceServiceLocal:
     def start_camera_loop(self):
         """Background thread to capture and process frames"""
         self.camera.start_capture()
+        self.lcd.display("Device Powered", "Initializing...")
         self.recognizer.build_gallery_from_device()
+
+        self.lcd.display("Ready", "Door Locked")
 
         def loop():
             while True:
