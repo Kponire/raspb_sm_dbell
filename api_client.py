@@ -25,7 +25,7 @@ class APIClient:
         self.stream_thread = threading.Thread(target=self._stream_frames, daemon=True)
         
         # Register device
-        self._register_device()
+        # self._register_device()
     
     def initiate_call(self):
         """Initiate a call to the owner through backend"""
