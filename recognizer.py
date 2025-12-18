@@ -105,6 +105,7 @@ class Recognizer:
                 
                 try:
                     # Get signed URL for the image
+                    print("[DEBUG] Getting signed URL")
                     signed = self.sup.storage.from_('images').create_signed_url(path, 3600)
                     url = signed.get('signed_url') or signed.get('signedURL')
                     
