@@ -197,6 +197,7 @@ class Recognizer:
             
             # Extract face region
             face_region = frame[startY:endY, startX:endX]
+            face_region = cv2.resize(face_region, (160, 160))
             
             if face_region.size == 0:
                 continue
@@ -267,4 +268,4 @@ class Recognizer:
 
 
 recognize = Recognizer()
-recognize.build_gallery_from_device()
+recognize.build_gallery_from_device(model_name="SFace")
