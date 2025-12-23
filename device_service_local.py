@@ -141,10 +141,8 @@ class DeviceServiceLocal:
 
         print(f"[INFO] Recognized: {name} ({conf:.2f})")
         self.lcd.display("Welcome", name[:16])
-
         self.capture_and_upload(frame, name, "recognized")
 
-        # 🔒 LOCAL door logic only
         if self.local_door_state == "locked":
             self.red.on()
             self.buzzer.beep(200)
@@ -153,14 +151,11 @@ class DeviceServiceLocal:
             self.red.off()
             return
 
-        # 🔓 Unlock locally
         self.relay.open()
         self.yellow.on()
         self.buzzer.beep(100)
         self.lcd.display("Access Granted", "Door Open")
-
         time.sleep(5)
-
         self.relay.close()
         self.yellow.off()
         self.lcd.display("Door Locked", "Ready")

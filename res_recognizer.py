@@ -107,14 +107,14 @@ class Recognizer:
                     # Get signed URL for the image
                     print("[DEBUG] Getting signed URL")
                     signed = self.sup.storage.from_('images').create_signed_url(path, 3600)
-                    url = signed.get('signed_url') or signed.get('signedURL')
+                    url = None #signed.get('signed_url') or signed.get('signedURL')
                     
                     if not url:
                         print(f"[WARN] No URL for {path}")
                         continue
                     
                     # Download image
-                    resp = requests.get(url)
+                    resp = requests.get(url, timeout=3)
                     resp.raise_for_status()
                     img_bytes = resp.content
                     
@@ -146,7 +146,7 @@ class Recognizer:
                         
                         if len(parts) >= 2:
                             # watchlistId_watchlistName format
-                            person_name = parts[1] # '_'.join(parts[1:])  # Join all parts after ID
+                            person_name = '_'.join(parts[1:])  # Join all parts after ID
                         else:
                             person_name = "Unknown"
                         
@@ -263,7 +263,3 @@ class Recognizer:
         print("[INFO] Refreshing face recognition gallery...")
         self.build_gallery_from_device()
         print("[INFO] Gallery refreshed")
-
-
-recognize = Recognizer()
-recognize.build_gallery_from_device()
