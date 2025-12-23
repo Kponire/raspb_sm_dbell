@@ -129,14 +129,19 @@ class Recognizer:
                     
                     # Extract embedding
                     try:
-                        emb = self.DeepFace.represent(
+                        rep = self.DeepFace.represent(
                             img, 
                             model_name=self.model_name,
                             detector_backend="skip",
                             enforce_detection=False,
                             align=False
                         )
-                        
+
+                        if not rep:
+                            continue
+
+                        emb = np.array(rep[0]["embedding"], dtype=np.float32)
+                                            
                         # Extract person name from filename
                         # Format: deviceID/watchlistId_watchlistName.ext
                         filename = path.split('/')[-1] if '/' in path else path
@@ -197,20 +202,29 @@ class Recognizer:
             
             # Extract face region
             face_region = frame[startY:endY, startX:endX]
-            face_region = cv2.resize(face_region, (160, 160))
-            
-            if face_region.size == 0:
+            if face_region is None or face_region.size == 0:
                 continue
+
+            h, w = face_region.shape[:2]
+            if h < 30 or w < 30:
+                continue
+
+            face_region = cv2.resize(face_region, (160, 160), interpolation=cv2.INTER_AREA)
             
             try:
                 # Get embedding for face region
-                probe_emb = self.DeepFace.represent(
-                    face_region, 
+                rep = self.DeepFace.represent(
+                    face_region,
                     model_name=self.model_name,
                     detector_backend="skip",
                     enforce_detection=False,
                     align=False
                 )
+
+                if not rep:
+                    continue
+
+                probe_emb = np.array(rep[0]["embedding"], dtype=np.float32)
                 
                 # Compare with gallery
                 for entry in self.embeddings:
@@ -254,6 +268,51 @@ class Recognizer:
             }
         
         return False, {"reason": "no_match", "faces_detected": len(faces)}
+
+    # recognizer.py
+    def recognize_face(self, face_region):
+        """ Recognize a single cropped face image (160x160)"""
+        try:
+            rep = self.DeepFace.represent(
+                face_region,
+                model_name=self.model_name,
+                detector_backend="skip",
+                enforce_detection=False,
+                align=False
+            )
+
+            if not rep:
+                return False, None
+
+            probe_emb = np.array(rep[0]["embedding"], dtype=np.float32)
+
+            best_match = None
+            best_conf = 0.0
+
+            for entry in self.embeddings:
+                gallery_emb = entry["embedding"]
+
+                cos_sim = np.dot(probe_emb, gallery_emb) / (
+                    np.linalg.norm(probe_emb) * np.linalg.norm(gallery_emb) + 1e-10
+                )
+
+                if cos_sim > self.threshold and cos_sim > best_conf:
+                    best_conf = cos_sim
+                    best_match = {
+                        "name": entry["person_name"],
+                        "confidence": cos_sim,
+                        "source_image": entry["path"]
+                    }
+
+            if best_match:
+                return True, best_match
+
+            return False, None
+
+        except Exception as e:
+            print("[WARN] Face recognition error:", e)
+            return False, None
+
     
     def get_recognized_faces(self):
         """Get currently recognized faces"""

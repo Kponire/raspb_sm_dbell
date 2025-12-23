@@ -80,7 +80,17 @@ class DeviceServiceLocal:
                     cv2.putText(processed_frame, f"Face {confidence*100:.1f}%", (startX, y),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
-                    recognized, info = self.recognizer.recognize(frame)
+                    face_region = frame[startY:endY, startX:endX]
+                    if face_region is None or face_region.size == 0:
+                        continue
+
+                    h, w = face_region.shape[:2]
+                    if h < 30 or w < 30:
+                        continue
+
+                    face_region = cv2.resize(face_region, (160, 160), interpolation=cv2.INTER_AREA)
+                    recognized, info = self.recognizer.recognize_face(face_region)
+
                     if recognized:
                         name = info.get("name", "Recognized")
                         rec_conf = info.get("confidence", 0)
