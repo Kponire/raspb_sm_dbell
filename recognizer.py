@@ -267,5 +267,6 @@ class Recognizer:
         print("[INFO] Gallery refreshed")
 
 
-recognize = Recognizer()
-recognize.build_gallery_from_device(model_name="SFace")
+if __name__ == "__main__":
+    recognize = Recognizer()
+    recognize.build_gallery_from_device(model_name="SFace")
