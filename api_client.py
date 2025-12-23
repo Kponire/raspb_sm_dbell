@@ -75,7 +75,6 @@ class APIClient:
                 f"{self.base_url}/api/images/upload-captured",
                 headers=self.headers,
                 json=payload,
-                timeout=10
             )
             
             if response.status_code == 200:
@@ -218,7 +217,6 @@ class APIClient:
                 f"{self.base_url}/api/notifications/device",
                 headers=self.headers,
                 json=payload,
-                timeout=10
             )
             
             if response.status_code == 200:

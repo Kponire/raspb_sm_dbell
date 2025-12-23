@@ -205,11 +205,11 @@ class Recognizer:
             try:
                 # Get embedding for face region
                 probe_emb = self.DeepFace.represent(
-                    face_region,
+                    face_region, 
                     model_name=self.model_name,
-                    detector_backend=self.detector_backend,
+                    detector_backend="skip",
                     enforce_detection=False,
-                    align=True
+                    align=False
                 )
                 
                 # Compare with gallery
