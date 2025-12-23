@@ -128,13 +128,13 @@ class Recognizer:
                     
                     # Extract embedding
                     try:
-                        emb = self.DeepFace.represent(
-                            img, 
-                            model_name=self.model_name,
-                            detector_backend=self.detector_backend,
-                            enforce_detection=False,
-                            align=True
-                        )
+                        # emb = self.DeepFace.represent(
+                        #     img, 
+                        #     model_name=self.model_name,
+                        #     detector_backend=self.detector_backend,
+                        #     enforce_detection=False,
+                        #     align=True
+                        # )
                         
                         # Extract person name from filename
                         # Format: deviceID/watchlistId_watchlistName.ext
@@ -151,7 +151,7 @@ class Recognizer:
                             person_name = "Unknown"
                         
                         self.embeddings.append({
-                            'embedding': emb,
+                            #'embedding': emb,
                             'person_name': person_name,
                             'path': path,
                             'url': url
