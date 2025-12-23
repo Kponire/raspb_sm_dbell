@@ -268,5 +268,5 @@ class Recognizer:
 
 
 if __name__ == "__main__":
-    recognize = Recognizer()
-    recognize.build_gallery_from_device(model_name="SFace")
+    recognize = Recognizer(model_name="SFace")
+    recognize.build_gallery_from_device()
