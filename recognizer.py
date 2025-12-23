@@ -121,6 +121,7 @@ class Recognizer:
                     # Convert bytes to numpy array
                     nparr = np.frombuffer(img_bytes, np.uint8)
                     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+                    img = cv2.resize(img, (640, 640), interpolation=cv2.INTER_AREA)
                     
                     if img is None:
                         print(f"[WARN] Failed to decode image: {path}")
@@ -128,13 +129,13 @@ class Recognizer:
                     
                     # Extract embedding
                     try:
-                        # emb = self.DeepFace.represent(
-                        #     img, 
-                        #     model_name=self.model_name,
-                        #     detector_backend=self.detector_backend,
-                        #     enforce_detection=False,
-                        #     align=True
-                        # )
+                        emb = self.DeepFace.represent(
+                            img, 
+                            model_name=self.model_name,
+                            detector_backend="skip",
+                            enforce_detection=False,
+                            align=False
+                        )
                         
                         # Extract person name from filename
                         # Format: deviceID/watchlistId_watchlistName.ext
@@ -151,7 +152,7 @@ class Recognizer:
                             person_name = "Unknown"
                         
                         self.embeddings.append({
-                            #'embedding': emb,
+                            'embedding': emb,
                             'person_name': person_name,
                             'path': path,
                             'url': url
