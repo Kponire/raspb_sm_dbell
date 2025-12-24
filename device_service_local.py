@@ -148,7 +148,7 @@ class DeviceServiceLocal:
         return None
 
 
-    def handle_recognized(self, info, frame):
+    def handle_recognized_person(self, info, frame):
         name = info.get("name", "Unknown")
         conf = info.get("confidence", 0)
 
