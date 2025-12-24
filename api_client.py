@@ -97,3 +97,10 @@ class APIClient:
             print(f"[ERROR] Failed to send notification: {e}")
             return False
 
+# Global instance
+api_client = None
+
+def init_api_client(base_url, device_id, device_name="Raspberry Pi"):
+    global api_client
+    api_client = APIClient(base_url, device_id, device_name)
+    return api_client
