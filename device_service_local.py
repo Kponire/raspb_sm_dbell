@@ -129,14 +129,14 @@ class DeviceServiceLocal:
     # Recognition / Door / Notification
     # ----------------------------
     def capture_and_upload(self, frame, person_name="Unknown", status="unrecognized"):
-        """Send frame to backend for storage/notification"""
         try:
             _, buffer = cv2.imencode('.jpg', frame)
             image_bytes = buffer.tobytes()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{person_name}_{status}_{timestamp}.jpg"
+
             if api_client:
-                api_client.upload_captured_face(
+                return api_client.upload_captured_face(
                     image_bytes=image_bytes,
                     filename=filename,
                     person_name=person_name,
@@ -145,13 +145,25 @@ class DeviceServiceLocal:
         except Exception as e:
             print("[ERROR] Upload failed:", e)
 
+        return None
+
+
     def handle_recognized(self, info, frame):
         name = info.get("name", "Unknown")
         conf = info.get("confidence", 0)
 
         print(f"[INFO] Recognized: {name} ({conf:.2f})")
         self.lcd.display("Welcome", name[:16])
-        self.capture_and_upload(frame, name, "recognized")
+        image_url = self.capture_and_upload(frame, name, "recognized")
+
+        if image_url and api_client:
+            api_client.send_notification(
+                status="recognized",
+                image_url=image_url,
+                confidence=conf,
+                person_name=name
+            )
+
 
         if self.local_door_state == "locked":
             self.red.on()
@@ -176,9 +188,16 @@ class DeviceServiceLocal:
         self.lcd.display("Access Denied", "Unknown Person")
         self.red_indicator.on()
         self.buzzer.beep(300)
-        self.capture_and_upload(frame, "Unknown", "unrecognized")
-        if api_client:
-            api_client.send_notification("unrecognized", frame)
+        image_url = self.capture_and_upload(frame, "Unknown", "unrecognized")
+
+        if image_url and api_client:
+            api_client.send_notification(
+                status="unrecognized",
+                image_url=image_url,
+                confidence=None,
+                person_name="Unknown"
+            )
+
         time.sleep(3)
         self.red_indicator.off()
 
