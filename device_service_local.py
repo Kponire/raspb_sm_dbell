@@ -20,7 +20,7 @@ class DeviceServiceLocal:
 
         # Camera & recognizer
         self.camera = Camera(resolution=(640, 480), framerate=15)
-        self.recognizer = Recognizer(model_name="SFace", threshold=0.50, base_url=self.base_url)
+        self.recognizer = Recognizer(model_name="SFace", threshold=0.40, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
@@ -81,7 +81,6 @@ class DeviceServiceLocal:
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
                     face_region = frame[startY:endY, startX:endX]
-
                     if face_region is None or face_region.size == 0:
                         continue
 
@@ -189,15 +188,15 @@ class DeviceServiceLocal:
         self.lcd.display("Access Denied", "Unknown Person")
         self.red_indicator.on()
         self.buzzer.beep(300)
-        image_url = self.capture_and_upload(frame, "Unknown", "unrecognized")
+        # image_url = self.capture_and_upload(frame, "Unknown", "unrecognized")
 
-        if image_url and api_client:
-            api_client.send_notification(
-                status="unrecognized",
-                image_url=image_url,
-                confidence=None,
-                person_name="Unknown"
-            )
+        # if image_url and api_client:
+        #     api_client.send_notification(
+        #         status="unrecognized",
+        #         image_url=image_url,
+        #         confidence=None,
+        #         person_name="Unknown"
+        #     )
 
         time.sleep(3)
         self.red_indicator.off()
@@ -223,7 +222,6 @@ class DeviceServiceLocal:
             with self.frame_lock:
                 frame = self.latest_frame
             if frame is not None:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 _, buffer = cv2.imencode('.jpg', frame)
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
