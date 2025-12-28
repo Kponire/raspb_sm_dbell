@@ -77,6 +77,10 @@ class Recognizer:
         self.device_id = os.getenv('DEVICE_ID')
         if not self.device_id:
             print("[WARN] DEVICE_ID not set. Will load all images from bucket.")
+
+    def l2_normalize(vec):
+        vec = np.asarray(vec, dtype=np.float32)
+        return vec / (np.linalg.norm(vec) + 1e-10)
     
     def load_embeddings_from_backend(self):
         """Load embeddings from deployed backend (no images)"""
@@ -96,8 +100,9 @@ class Recognizer:
             for item in data.get("embeddings", []):
                 self.embeddings.append({
                     "person_name": item["name"],
-                    "embedding": np.array(item["embedding"], dtype=np.float32)
+                    "embedding": self.l2_normalize(item["embedding"])
                 })
+
 
             print(f"[INFO] Loaded {len(self.embeddings)} embeddings from backend")
 
@@ -194,18 +199,19 @@ class Recognizer:
     def recognize_face(self, face_region):
         """ Recognize a single cropped face image (160x160)"""
         try:
+            face_region = cv2.cvtColor(face_region, cv2.COLOR_BGR2RGB)
             rep = self.DeepFace.represent(
                 face_region,
                 model_name=self.model_name,
                 detector_backend="skip",
                 enforce_detection=False,
-                align=False
+                align=True
             )
 
             if not rep:
                 return False, None
 
-            probe_emb = np.array(rep[0]["embedding"], dtype=np.float32)
+            probe_emb = self.l2_normalize(rep[0]["embedding"])
 
             best_match = None
             best_conf = 0.0
@@ -222,7 +228,7 @@ class Recognizer:
                     best_match = {
                         "name": entry["person_name"],
                         "confidence": cos_sim,
-                        "source_image": entry["path"]
+                        #"source_image": entry["path"]
                     }
 
             if best_match:

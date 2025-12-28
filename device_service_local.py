@@ -20,7 +20,7 @@ class DeviceServiceLocal:
 
         # Camera & recognizer
         self.camera = Camera(resolution=(640, 480), framerate=15)
-        self.recognizer = Recognizer(model_name="SFace", base_url=self.base_url)
+        self.recognizer = Recognizer(model_name="SFace", threshold=0.95, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
