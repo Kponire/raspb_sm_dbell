@@ -78,7 +78,7 @@ class Recognizer:
         if not self.device_id:
             print("[WARN] DEVICE_ID not set. Will load all images from bucket.")
 
-    def l2_normalize(vec):
+    def l2_normalize(self, vec):
         vec = np.asarray(vec, dtype=np.float32)
         return vec / (np.linalg.norm(vec) + 1e-10)
     
@@ -222,6 +222,8 @@ class Recognizer:
                 cos_sim = np.dot(probe_emb, gallery_emb) / (
                     np.linalg.norm(probe_emb) * np.linalg.norm(gallery_emb) + 1e-10
                 )
+
+                print(cos_sim)
 
                 if cos_sim > self.threshold and cos_sim > best_conf:
                     best_conf = cos_sim
