@@ -211,8 +211,8 @@ class Recognizer:
             if not rep:
                 return False, None
 
-            probe_emb_raw = np.array(rep[0]["embedding"], dtype=np.float32)
-            probe_emb = self.l2_normalize(probe_emb_raw)
+            # probe_emb_raw = np.array(rep[0]["embedding"], dtype=np.float32)
+            probe_emb = self.l2_normalize(rep[0]["embedding"])
 
             best_match = None
             best_conf = 0.0
