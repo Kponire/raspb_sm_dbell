@@ -20,7 +20,7 @@ class DeviceServiceLocal:
 
         # Camera & recognizer
         self.camera = Camera(resolution=(640, 480), framerate=15)
-        self.recognizer = Recognizer(model_name="SFace", threshold=0.95, base_url=self.base_url)
+        self.recognizer = Recognizer(model_name="SFace", threshold=0.50, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
@@ -80,7 +80,20 @@ class DeviceServiceLocal:
                     cv2.putText(processed_frame, f"Face {confidence*100:.1f}%", (startX, y),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
-                    face_region = frame[startY:endY, startX:endX]
+                    # face_region = frame[startY:endY, startX:endX]
+                    margin = 0.25
+                    h, w = frame.shape[:2]
+
+                    dx = int((endX - startX) * margin)
+                    dy = int((endY - startY) * margin)
+
+                    x1 = max(0, startX - dx)
+                    y1 = max(0, startY - dy)
+                    x2 = min(w, endX + dx)
+                    y2 = min(h, endY + dy)
+
+                    face_region = frame[y1:y2, x1:x2]
+
                     if face_region is None or face_region.size == 0:
                         continue
 
@@ -222,6 +235,7 @@ class DeviceServiceLocal:
             with self.frame_lock:
                 frame = self.latest_frame
             if frame is not None:
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 _, buffer = cv2.imencode('.jpg', frame)
                 yield (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
