@@ -80,19 +80,7 @@ class DeviceServiceLocal:
                     cv2.putText(processed_frame, f"Face {confidence*100:.1f}%", (startX, y),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
-                    # face_region = frame[startY:endY, startX:endX]
-                    margin = 0.25
-                    h, w = frame.shape[:2]
-
-                    dx = int((endX - startX) * margin)
-                    dy = int((endY - startY) * margin)
-
-                    x1 = max(0, startX - dx)
-                    y1 = max(0, startY - dy)
-                    x2 = min(w, endX + dx)
-                    y2 = min(h, endY + dy)
-
-                    face_region = frame[y1:y2, x1:x2]
+                    face_region = frame[startY:endY, startX:endX]
 
                     if face_region is None or face_region.size == 0:
                         continue
