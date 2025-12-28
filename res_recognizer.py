@@ -47,7 +47,7 @@ class FaceDetector:
         return faces
 
 class Recognizer:
-    def __init__(self, model_name: str = 'Facenet', detector_backend: str = 'opencv', threshold: float = 0.40):
+    def __init__(self, model_name: str = 'Facenet', detector_backend: str = 'opencv', threshold: float = 0.40, base_url = None):
         import os
         from deepface import DeepFace
         
@@ -64,6 +64,7 @@ class Recognizer:
         self.threshold = threshold
         self.DeepFace = DeepFace
         self.embeddings = []
+        self.base_url = base_url
         
         # Initialize face detector
         self.face_detector = FaceDetector()
@@ -77,106 +78,31 @@ class Recognizer:
         if not self.device_id:
             print("[WARN] DEVICE_ID not set. Will load all images from bucket.")
     
-    def build_gallery_from_device(self):
-        """Build face recognition gallery from Supabase images bucket for this device"""
+    def load_embeddings_from_backend(self):
+        """Load embeddings from deployed backend (no images)"""
         try:
-            print(f"[INFO] Building gallery for device: {self.device_id}")
-            
-            # List files in the device's folder in images bucket
-            if self.device_id:
-                items = self.sup.storage.from_('images').list(path=self.device_id)
-                print(f"[DEBUG] Supabase items: {items}")
-            else:
-                # Fallback: list all images (not recommended for production)
-                items = self.sup.storage.from_('images').list()
-                print("[WARN] Loading all images from bucket (device ID not specified)")
-            
+            if not self.device_id:
+                print("[ERROR] DEVICE_ID not set")
+                return
+
+            url = f"{self.base_url}/api/watchlist/device/{self.device_id}/embeddings"
+
+            resp = requests.get(url)
+            resp.raise_for_status()
+
+            data = resp.json()
             self.embeddings = []
-            image_count = 0
-            
-            for obj in items:
-                path = obj.get('name')
-                path = self.device_id + '/' + path
-                print(f"[DEBUG] Processing image: {path}")
-                
-                # Skip if not in device folder (when device_id is not set)
-                if self.device_id and not path.startswith(f"{self.device_id}/"):
-                    continue
-                
-                try:
-                    # Get signed URL for the image
-                    print("[DEBUG] Getting signed URL")
-                    signed = self.sup.storage.from_('images').create_signed_url(path, 3600)
-                    url = None #signed.get('signed_url') or signed.get('signedURL')
-                    
-                    if not url:
-                        print(f"[WARN] No URL for {path}")
-                        continue
-                    
-                    # Download image
-                    resp = requests.get(url, timeout=3)
-                    resp.raise_for_status()
-                    img_bytes = resp.content
-                    
-                    # Convert bytes to numpy array
-                    nparr = np.frombuffer(img_bytes, np.uint8)
-                    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                    
-                    if img is None:
-                        print(f"[WARN] Failed to decode image: {path}")
-                        continue
-                    
-                    # Extract embedding
-                    try:
-                        emb = self.DeepFace.represent(
-                            img, 
-                            model_name=self.model_name,
-                            detector_backend=self.detector_backend,
-                            enforce_detection=False,
-                            align=True
-                        )
-                        
-                        # Extract person name from filename
-                        # Format: deviceID/watchlistId_watchlistName.ext
-                        filename = path.split('/')[-1] if '/' in path else path
-                        
-                        # Remove extension and split
-                        name_without_ext = filename.rsplit('.', 1)[0]
-                        parts = name_without_ext.split('_')
-                        
-                        if len(parts) >= 2:
-                            # watchlistId_watchlistName format
-                            person_name = '_'.join(parts[1:])  # Join all parts after ID
-                        else:
-                            person_name = "Unknown"
-                        
-                        self.embeddings.append({
-                            'embedding': emb,
-                            'person_name': person_name,
-                            'path': path,
-                            'url': url
-                        })
-                        
-                        image_count += 1
-                        print(f"[INFO] Loaded embedding for: {person_name} from {filename}")
-                        
-                    except Exception as e:
-                        print(f"[WARN] Failed to extract embedding from {path}: {e}")
-                        continue
-                        
-                except Exception as e:
-                    print(f"[WARN] Failed to process {path}: {e}")
-                    continue
-            
-            print(f"[INFO] Gallery built with {image_count} embeddings")
-            
-            if image_count == 0:
-                print("[WARN] No images found in gallery. Check Supabase bucket and device ID.")
-                
+
+            for item in data.get("embeddings", []):
+                self.embeddings.append({
+                    "person_name": item["name"],
+                    "embedding": np.array(item["embedding"], dtype=np.float32)
+                })
+
+            print(f"[INFO] Loaded {len(self.embeddings)} embeddings from backend")
+
         except Exception as e:
-            print(f"[ERROR] Failed to build gallery: {e}")
-            import traceback
-            traceback.print_exc()
+            print("[ERROR] Failed to load embeddings:", e)
     
     def recognize(self, frame):
         """Recognize faces in frame"""

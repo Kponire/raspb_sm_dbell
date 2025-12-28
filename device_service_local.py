@@ -1,7 +1,7 @@
 import threading
 import time
 import cv2
-from flask import Flask, Response, jsonify
+from flask import Flask, Response, jsonify, request
 from camera import Camera
 from recognizer import Recognizer
 from hardware import Relay, Buzzer, LCD, YellowIndicator, RedIndicator, Button
@@ -20,7 +20,7 @@ class DeviceServiceLocal:
 
         # Camera & recognizer
         self.camera = Camera(resolution=(640, 480), framerate=15)
-        self.recognizer = Recognizer(model_name="SFace")
+        self.recognizer = Recognizer(model_name="SFace", base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
@@ -55,7 +55,7 @@ class DeviceServiceLocal:
         """Background thread to capture and process frames"""
         self.camera.start_capture()
         self.lcd.display("Device Powered", "Initializing...")
-        self.recognizer.build_gallery_from_device()
+        self.recognizer.load_embeddings_from_backend()
 
         self.lcd.display("Ready", "Door Locked")
 
@@ -249,6 +249,21 @@ def status():
         "camera": "active" if service.camera else "inactive",
         "recognizer": "ready" if service.recognizer else "not_ready"
     })
+
+@app.route("/api/door/control", methods=["POST"])
+def door_control():
+    data = request.json
+    action = data.get("action")  # "lock" | "unlock"
+
+    if action == "unlock":
+        Relay.open()
+        return jsonify({"status": "unlocked"})
+
+    elif action == "lock":
+        Relay.close()
+        return jsonify({"status": "locked"})
+
+    return jsonify({"error": "invalid action"}), 400
 
 # ----------------------------
 if __name__ == "__main__":
