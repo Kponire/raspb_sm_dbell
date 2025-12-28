@@ -211,7 +211,8 @@ class Recognizer:
             if not rep:
                 return False, None
 
-            probe_emb = self.l2_normalize(rep[0]["embedding"])
+            probe_emb_raw = np.array(rep[0]["embedding"], dtype=np.float32)
+            probe_emb = self.l2_normalize(probe_emb_raw)
 
             best_match = None
             best_conf = 0.0
@@ -219,11 +220,18 @@ class Recognizer:
             for entry in self.embeddings:
                 gallery_emb = entry["embedding"]
 
-                cos_sim = np.dot(probe_emb, gallery_emb) / (
-                    np.linalg.norm(probe_emb) * np.linalg.norm(gallery_emb) + 1e-10
-                )
+                # Verify gallery embedding is normalized (optional debug)
+                gallery_norm = np.linalg.norm(gallery_emb)
+                if abs(gallery_norm - 1.0) > 0.01:
+                    print(f"[WARN] Gallery embedding not normalized: {gallery_norm}")
 
-                print(cos_sim)
+                # cos_sim = np.dot(probe_emb, gallery_emb) / (
+                #     np.linalg.norm(probe_emb) * np.linalg.norm(gallery_emb) + 1e-10
+                # )
+
+                cos_sim = np.dot(probe_emb, gallery_emb)
+
+                print(f"[DEBUG] Similarity: {cos_sim:.4f}")
 
                 if cos_sim > self.threshold and cos_sim > best_conf:
                     best_conf = cos_sim
