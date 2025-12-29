@@ -177,15 +177,6 @@ class DeviceServiceLocal:
                 person_name=name
             )
 
-
-        if self.local_door_state == "locked":
-            self.red_indicator.on()
-            self.buzzer.beep(200)
-            self.lcd.display("Door Locked", "Access Denied")
-            time.sleep(2)
-            self.red_indicator.off()
-            return
-
         self.relay.open()
         self.yellow_indicator.on()
         self.buzzer.beep(100)
@@ -197,6 +188,7 @@ class DeviceServiceLocal:
 
 
     def handle_unrecognized_person(self, frame, faces_count=1):
+        self.relay.close()
         print(f"[INFO] Unrecognized person detected ({faces_count} faces)")
         self.lcd.display("Access Denied", "Unknown Person")
         self.red_indicator.on()
