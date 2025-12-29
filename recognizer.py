@@ -47,18 +47,10 @@ class FaceDetector:
         return faces
 
 class Recognizer:
-    def __init__(self, model_name: str = 'Facenet', detector_backend: str = 'opencv', threshold: float = 0.40, base_url = None):
+    def __init__(self, model_name: str = 'Facenet512', detector_backend: str = 'opencv', threshold: float = 0.50, base_url = None):
         import os
         from deepface import DeepFace
-        
-        SUPABASE_URL = os.getenv('SUPABASE_URL')
-        SUPABASE_KEY = os.getenv('SUPABASE_KEY')
-        SUPABASE_BUCKET = os.getenv('SUPABASE_BUCKET', 'images')
-        
-        if not SUPABASE_URL or not SUPABASE_KEY:
-            raise RuntimeError('SUPABASE_URL and SUPABASE_KEY must be set')
-        
-        self.sup = create_client(SUPABASE_URL, SUPABASE_KEY)
+
         self.model_name = model_name
         self.detector_backend = detector_backend
         self.threshold = threshold
@@ -90,10 +82,8 @@ class Recognizer:
                 return
 
             url = f"{self.base_url}/api/watchlist/device/{self.device_id}/embeddings"
-
             resp = requests.get(url)
             resp.raise_for_status()
-
             data = resp.json()
             self.embeddings = []
 
@@ -102,7 +92,6 @@ class Recognizer:
                     "person_name": item["name"],
                     "embedding": self.l2_normalize(item["embedding"])
                 })
-
 
             print(f"[INFO] Loaded {len(self.embeddings)} embeddings from backend")
 
@@ -195,7 +184,6 @@ class Recognizer:
         
         return False, {"reason": "no_match", "faces_detected": len(faces)}
 
-    # recognizer.py
     def recognize_face(self, face_region):
         """ Recognize a single cropped face image (160x160)"""
         try:
@@ -210,16 +198,13 @@ class Recognizer:
 
             if not rep:
                 return False, None
-
             # probe_emb_raw = np.array(rep[0]["embedding"], dtype=np.float32)
             probe_emb = self.l2_normalize(rep[0]["embedding"])
-
             best_match = None
             best_conf = 0.0
 
             for entry in self.embeddings:
                 gallery_emb = entry["embedding"]
-
                 # Verify gallery embedding is normalized (optional debug)
                 gallery_norm = np.linalg.norm(gallery_emb)
                 if abs(gallery_norm - 1.0) > 0.01:
@@ -228,9 +213,7 @@ class Recognizer:
                 # cos_sim = np.dot(probe_emb, gallery_emb) / (
                 #     np.linalg.norm(probe_emb) * np.linalg.norm(gallery_emb) + 1e-10
                 # )
-
                 cos_sim = np.dot(probe_emb, gallery_emb)
-
                 print(f"[DEBUG] Similarity: {cos_sim:.4f}")
 
                 if cos_sim > self.threshold and cos_sim > best_conf:
@@ -264,5 +247,5 @@ class Recognizer:
 
 
 if __name__ == "__main__":
-    recognize = Recognizer(model_name="SFace")
+    recognize = Recognizer()
     recognize.build_gallery_from_device()
