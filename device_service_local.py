@@ -4,7 +4,7 @@ import cv2
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from camera import Camera
-from raspberrypi_backend.security import decrypt_request
+from security import decrypt_request
 from recognizer import Recognizer
 from hardware import Relay, Buzzer, LCD, YellowIndicator, RedIndicator, Button
 from api_client import api_client
