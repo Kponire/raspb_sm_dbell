@@ -15,7 +15,7 @@ def decrypt_request(ciphertext: str):
     try:
         decrypted = fernet.decrypt(ciphertext.encode(), ttl=10)
         payload = json.loads(decrypted)
-
+        print("Decrypted payload:", payload)
         # Anti-replay
         now = int(time.time())
         if abs(now - payload["timestamp"]) > 10:

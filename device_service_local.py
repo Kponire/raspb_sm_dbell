@@ -267,6 +267,7 @@ def door_control():
         return jsonify({"error": "missing payload"}), 400
 
     payload = decrypt_request(encrypted)
+    print("Decrypted payload:", payload)
     if not payload:
         return jsonify({"error": "invalid or expired request"}), 403
 
