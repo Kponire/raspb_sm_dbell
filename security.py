@@ -6,10 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 SECRET = os.getenv("DOOR_SECRET_KEY")
+print("Loaded SECRET:", SECRET)
 
-fernet = Fernet(base64.urlsafe_b64encode(
-    base64.b64decode(SECRET)
-))
+fernet = Fernet(SECRET.encode())
 
 def decrypt_request(ciphertext: str):
     try:
