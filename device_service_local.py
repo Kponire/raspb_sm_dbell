@@ -2,6 +2,7 @@ import threading
 import time
 import cv2
 from flask import Flask, Response, jsonify, request
+from flask_cors import CORS
 from camera import Camera
 from recognizer import Recognizer
 from hardware import Relay, Buzzer, LCD, YellowIndicator, RedIndicator, Button
@@ -11,6 +12,7 @@ from datetime import datetime
 
 # Flask app for local MJPEG streaming
 app = Flask(__name__)
+CORS(app)
 
 # Hardware & device service
 class DeviceServiceLocal:
@@ -261,11 +263,13 @@ def door_control():
     action = data.get("action")  # "lock" | "unlock"
 
     if action == "unlock":
-        Relay.open()
+        service.relay.open()
+        service.local_door_state = "unlocked"
         return jsonify({"status": "unlocked"})
 
     elif action == "lock":
-        Relay.close()
+        service.relay.close()
+        service.local_door_state = "locked"
         return jsonify({"status": "locked"})
 
     return jsonify({"error": "invalid action"}), 400
