@@ -47,7 +47,7 @@ class FaceDetector:
         return faces
 
 class Recognizer:
-    def __init__(self, model_name: str = 'Facenet512', detector_backend: str = 'opencv', threshold: float = 0.50, base_url = None):
+    def __init__(self, model_name: str = 'Facenet512', detector_backend: str = 'opencv', threshold: float = 0.60, base_url = None):
         import os
         from deepface import DeepFace
 

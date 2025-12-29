@@ -20,7 +20,7 @@ class DeviceServiceLocal:
 
         # Camera & recognizer
         self.camera = Camera(resolution=(640, 480), framerate=15)
-        self.recognizer = Recognizer(threshold=0.50, base_url=self.base_url)
+        self.recognizer = Recognizer(threshold=0.60, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
@@ -164,7 +164,7 @@ class DeviceServiceLocal:
     def handle_recognized_person(self, info, frame):
         name = info.get("name", "Unknown")
         conf = info.get("confidence", 0)
-
+        conf = float(conf) if conf is not None else None
         print(f"[INFO] Recognized: {name} ({conf:.2f})")
         self.lcd.display("Welcome", name[:16])
         image_url = self.capture_and_upload(frame, name, "recognized")
@@ -179,20 +179,20 @@ class DeviceServiceLocal:
 
 
         if self.local_door_state == "locked":
-            self.red.on()
+            self.red_indicator.on()
             self.buzzer.beep(200)
             self.lcd.display("Door Locked", "Access Denied")
             time.sleep(2)
-            self.red.off()
+            self.red_indicator.off()
             return
 
         self.relay.open()
-        self.yellow.on()
+        self.yellow_indicator.on()
         self.buzzer.beep(100)
         self.lcd.display("Access Granted", "Door Open")
         time.sleep(5)
         self.relay.close()
-        self.yellow.off()
+        self.yellow_indicator.off()
         self.lcd.display("Door Locked", "Ready")
 
 
