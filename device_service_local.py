@@ -4,6 +4,7 @@ import cv2
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 from camera import Camera
+from raspberrypi_backend.security import decrypt_request
 from recognizer import Recognizer
 from hardware import Relay, Buzzer, LCD, YellowIndicator, RedIndicator, Button
 from api_client import api_client
@@ -260,16 +261,25 @@ def status():
 @app.route("/api/door/control", methods=["POST"])
 def door_control():
     data = request.json
-    action = data.get("action")  # "lock" | "unlock"
+    encrypted = data.get("data")
+
+    if not encrypted:
+        return jsonify({"error": "missing payload"}), 400
+
+    payload = decrypt_request(encrypted)
+    if not payload:
+        return jsonify({"error": "invalid or expired request"}), 403
+
+    action = payload["action"]
 
     if action == "unlock":
-        service.relay.open()
         service.local_door_state = "unlocked"
+        service.relay.open()
         return jsonify({"status": "unlocked"})
 
-    elif action == "lock":
-        service.relay.close()
+    if action == "lock":
         service.local_door_state = "locked"
+        service.relay.close()
         return jsonify({"status": "locked"})
 
     return jsonify({"error": "invalid action"}), 400
