@@ -1,6 +1,9 @@
 import base64, json, time
 from cryptography.fernet import Fernet, InvalidToken
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 SECRET = os.getenv("DOOR_SECRET_KEY")
 
