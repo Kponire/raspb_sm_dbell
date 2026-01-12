@@ -23,7 +23,7 @@ class UIManager:
         os.environ['SDL_NOMOUSE'] = '1'  # Disable mouse cursor initially
         
         pygame.init()
-        pygame.display.init()
+        #pygame.display.init()
         
         # Display configuration for 3.5" RPi Display (480x320)
         self.width = 480
