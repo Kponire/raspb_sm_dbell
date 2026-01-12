@@ -1,42 +1,38 @@
 import threading
 import time
 import cv2
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, render_template
 from flask_cors import CORS
+from flask_socketio import SocketIO, emit
 from camera import Camera
 from security import decrypt_request
 from recognizer import Recognizer
 from hardware import Relay, Buzzer
 from api_client import api_client
-from ui_manager import UIManager
 import os
 from datetime import datetime
 
-# Flask app
+# Flask app with SocketIO for real-time updates
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key-here'
 CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 class DeviceServiceLocal:
-    """Smart Doorbell Device Service with integrated touchscreen UI"""
+    """Smart Doorbell Device Service with web-based UI"""
     
     def __init__(self, device_id, base_url):
         self.device_id = device_id if device_id else os.getenv("DEVICE_ID")
         self.base_url = base_url if base_url else os.getenv("BACKEND_URL")
 
-        # Initialize UI Manager (must be in main thread)
-        self.ui = UIManager(primary_color="#c2255c")
-        self.ui.show_loading("Initializing System", "Starting Smart Doorbell...")
-
-        # Camera & recognizer
-        self.ui.update_loading("Initializing Camera", 20)
+        print("[INFO] Initializing Camera...")
         self.camera = Camera(resolution=(640, 480), framerate=15)
         
-        self.ui.update_loading("Loading Face Recognition", 40)
+        print("[INFO] Loading Face Recognition...")
         self.recognizer = Recognizer(threshold=0.60, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
-        # Hardware
-        self.ui.update_loading("Initializing Hardware", 60)
+        print("[INFO] Initializing Hardware...")
         self.relay = Relay(4)
         self.buzzer = Buzzer(27)
 
@@ -46,17 +42,18 @@ class DeviceServiceLocal:
         self.local_door_state = "locked"
         self.last_recognition_time = 0
         self.recognition_cooldown = 3
+        self.system_status = "initializing"
 
         # MJPEG frame
         self.latest_frame = None
         self.frame_lock = threading.Lock()
 
-        # Initialize API client
-        self.ui.update_loading("Connecting to Server", 80)
+        print("[INFO] Connecting to Server...")
         self._init_api_client()
         
-        self.ui.update_loading("System Ready", 100)
-        time.sleep(1)
+        print("[INFO] System Ready!")
+        self.system_status = "ready"
+        self._emit_status("idle", "System Ready", door_locked=True)
 
     def _init_api_client(self):
         """Initialize connection to backend API"""
@@ -64,14 +61,25 @@ class DeviceServiceLocal:
         from api_client import init_api_client
         api_client = init_api_client(self.base_url, self.device_id, "Smart Doorbell")
 
+    def _emit_status(self, state, message, **kwargs):
+        """Emit status update to web UI via SocketIO"""
+        data = {
+            "state": state,
+            "message": message,
+            "door_locked": kwargs.get("door_locked", self.local_door_state == "locked"),
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            **kwargs
+        }
+        socketio.emit('status_update', data)
+
     def start_camera_loop(self):
         """Background thread for camera capture and face processing"""
         self.camera.start_capture()
         
-        self.ui.show_status("loading", "Loading Face Database...")
+        self._emit_status("loading", "Loading Face Database...")
         self.recognizer.load_embeddings_from_backend()
         
-        self.ui.show_idle(door_locked=True)
+        self._emit_status("idle", "Monitoring for faces", door_locked=True)
 
         def loop():
             while True:
@@ -86,7 +94,7 @@ class DeviceServiceLocal:
                 face_detected = len(faces) > 0
 
                 if face_detected and not self.processing:
-                    self.ui.show_detecting()
+                    self._emit_status("detecting", "Face detected - Analyzing...")
 
                 for face in faces:
                     startX, startY, endX, endY = face["box"]
@@ -141,7 +149,10 @@ class DeviceServiceLocal:
                     self.last_recognition_time = current_time
                     self.processing = False
                 elif not faces and not self.processing:
-                    self.ui.show_idle(door_locked=(self.local_door_state == "locked"))
+                    if self.system_status != "idle":
+                        self.system_status = "idle"
+                        self._emit_status("idle", "Monitoring for faces", 
+                                        door_locked=(self.local_door_state == "locked"))
 
                 time.sleep(0.05)
 
@@ -175,7 +186,8 @@ class DeviceServiceLocal:
         
         print(f"[INFO] Recognized: {name} ({conf:.2f})")
         
-        self.ui.show_access_granted(name)
+        self._emit_status("access_granted", f"Welcome {name}!", 
+                         person_name=name, door_locked=False)
         
         image_url = self.capture_and_upload(frame, name, "recognized")
         if image_url and api_client:
@@ -194,7 +206,8 @@ class DeviceServiceLocal:
         
         self.relay.close()
         self.local_door_state = "locked"
-        self.ui.show_idle(door_locked=True)
+        self.system_status = "idle"
+        self._emit_status("idle", "Door locked - Monitoring", door_locked=True)
 
     def handle_unrecognized_person(self, frame, faces_count=1):
         """Handle unauthorized person detection"""
@@ -203,11 +216,12 @@ class DeviceServiceLocal:
         
         print(f"[INFO] Unrecognized person detected ({faces_count} faces)")
         
-        self.ui.show_access_denied()
+        self._emit_status("access_denied", "Unknown Person Detected", door_locked=True)
         self.buzzer.beep(300)
         
         time.sleep(3)
-        self.ui.show_idle(door_locked=True)
+        self.system_status = "idle"
+        self._emit_status("idle", "Monitoring for faces", door_locked=True)
 
     def initiate_call_to_owner(self):
         """Initiate call to homeowner"""
@@ -215,14 +229,15 @@ class DeviceServiceLocal:
             return
             
         print("[INFO] Initiating call to owner")
-        self.ui.show_calling()
+        self._emit_status("calling", "Calling owner...")
         
         if api_client and api_client.initiate_call():
             self.call_in_progress = True
             self.buzzer.beep(100)
             time.sleep(3)
             self.call_in_progress = False
-            self.ui.show_idle(door_locked=(self.local_door_state == "locked"))
+            self._emit_status("idle", "Monitoring for faces", 
+                            door_locked=(self.local_door_state == "locked"))
 
     def mjpeg_frame_generator(self):
         """Generator for MJPEG video stream"""
@@ -240,18 +255,22 @@ class DeviceServiceLocal:
 service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
 service.start_camera_loop()
 
+
 # Flask routes
 @app.route('/')
 def index():
-    return "<h1>Raspberry Pi Smart Doorbell</h1><p><img src='/video_feed'></p>"
+    """Main UI page"""
+    return render_template('index.html')
 
 @app.route('/video_feed')
 def video_feed():
+    """MJPEG stream for monitoring"""
     return Response(service.mjpeg_frame_generator(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/api/status')
 def status():
+    """System status endpoint"""
     return jsonify({
         "status": "running",
         "camera": "active" if service.camera else "inactive",
@@ -278,17 +297,17 @@ def door_control():
     if action == "unlock":
         service.local_door_state = "unlocked"
         service.relay.open()
-        service.ui.show_status("unlocked", "Door Unlocked Remotely")
-        time.sleep(2)
-        service.ui.show_idle(door_locked=False)
+        service._emit_status("unlocked", "Door Unlocked Remotely", door_locked=False)
+        threading.Timer(2, lambda: service._emit_status("idle", "Monitoring", 
+                       door_locked=False)).start()
         return jsonify({"status": "unlocked"})
 
     if action == "lock":
         service.local_door_state = "locked"
         service.relay.close()
-        service.ui.show_status("locked", "Door Locked Remotely")
-        time.sleep(2)
-        service.ui.show_idle(door_locked=True)
+        service._emit_status("locked", "Door Locked Remotely", door_locked=True)
+        threading.Timer(2, lambda: service._emit_status("idle", "Monitoring", 
+                       door_locked=True)).start()
         return jsonify({"status": "locked"})
 
     return jsonify({"error": "invalid action"}), 400
@@ -299,26 +318,32 @@ def trigger_call():
     service.initiate_call_to_owner()
     return jsonify({"status": "call_initiated"})
 
+
+# SocketIO event handlers
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    print('[INFO] Client connected')
+    emit('status_update', {
+        'state': service.system_status,
+        'message': 'Connected to doorbell',
+        'door_locked': service.local_door_state == "locked",
+        'timestamp': datetime.now().strftime("%H:%M:%S")
+    })
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle client disconnection"""
+    print('[INFO] Client disconnected')
+
+@socketio.on('call_owner')
+def handle_call_owner():
+    """Handle call button press from UI"""
+    service.initiate_call_to_owner()
+
+
+# Main entry point
 if __name__ == "__main__":
     print("[INFO] Starting Smart Doorbell System")
-    # Start Flask in background thread
-    flask_thread = threading.Thread(
-        target=lambda: app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False),
-        daemon=True
-    )
-    flask_thread.start()
-
-    print("[INFO] Flask server running on 0.0.0.0:5000")
-    print("[INFO] UI running in main thread")
-
-    # Main UI loop - runs in main thread
-    try:
-        while True:
-            call_pressed = service.ui.update()
-            if call_pressed:
-                service.initiate_call_to_owner()
-            time.sleep(0.01)  # Small delay
-    except KeyboardInterrupt:
-        print("\n[INFO] Shutting down...")
-        service.relay.cleanup()
-        service.buzzer.cleanup()
+    print("[INFO] Web UI available at http://localhost:5000")
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)

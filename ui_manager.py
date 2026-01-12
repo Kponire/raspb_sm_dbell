@@ -1,8 +1,8 @@
 import os
 
 # MUST be before importing pygame anywhere
-os.environ["SDL_VIDEODRIVER"] = "kmsdrm"
-os.environ["SDL_DRM_DEVICE"] = "/dev/dri/card0"
+os.environ["SDL_VIDEODRIVER"] = "fbcon"
+os.environ["SDL_FBDEV"] = "/dev/fb1"
 os.environ["SDL_NOMOUSE"] = "1"
 
 import pygame
