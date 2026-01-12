@@ -12,21 +12,18 @@ from ui_manager import UIManager
 import os
 from datetime import datetime
 
-# Flask app for local MJPEG streaming and UI
+# Flask app
 app = Flask(__name__)
 CORS(app)
 
 class DeviceServiceLocal:
-    """
-    Smart Doorbell Device Service with integrated touchscreen UI
-    Handles camera, face recognition, door control, and user interface
-    """
+    """Smart Doorbell Device Service with integrated touchscreen UI"""
     
     def __init__(self, device_id, base_url):
         self.device_id = device_id if device_id else os.getenv("DEVICE_ID")
         self.base_url = base_url if base_url else os.getenv("BACKEND_URL")
 
-        # Initialize UI Manager first for startup feedback
+        # Initialize UI Manager (must be in main thread)
         self.ui = UIManager(primary_color="#c2255c")
         self.ui.show_loading("Initializing System", "Starting Smart Doorbell...")
 
@@ -38,19 +35,19 @@ class DeviceServiceLocal:
         self.recognizer = Recognizer(threshold=0.60, base_url=self.base_url)
         self.face_detector = self.recognizer.face_detector
 
-        # Hardware (relay and buzzer only, no LEDs/Button)
+        # Hardware
         self.ui.update_loading("Initializing Hardware", 60)
         self.relay = Relay(4)
         self.buzzer = Buzzer(27)
 
-        # State management
+        # State
         self.processing = False
         self.call_in_progress = False
         self.local_door_state = "locked"
         self.last_recognition_time = 0
-        self.recognition_cooldown = 3  # seconds
+        self.recognition_cooldown = 3
 
-        # MJPEG frame for browser streaming
+        # MJPEG frame
         self.latest_frame = None
         self.frame_lock = threading.Lock()
 
@@ -68,17 +65,12 @@ class DeviceServiceLocal:
         api_client = init_api_client(self.base_url, self.device_id, "Smart Doorbell")
 
     def start_camera_loop(self):
-        """
-        Main background thread for camera capture and face processing
-        Continuously monitors for faces and updates the UI
-        """
+        """Background thread for camera capture and face processing"""
         self.camera.start_capture()
         
-        # Load face embeddings from backend
         self.ui.show_status("loading", "Loading Face Database...")
         self.recognizer.load_embeddings_from_backend()
         
-        # Show ready state
         self.ui.show_idle(door_locked=True)
 
         def loop():
@@ -88,29 +80,24 @@ class DeviceServiceLocal:
                     time.sleep(0.05)
                     continue
 
-                # Detect faces in frame
                 faces = self.face_detector.detect(frame)
                 processed_frame = frame.copy()
                 recognized_info = None
                 face_detected = len(faces) > 0
 
-                # Update UI with detection status
                 if face_detected and not self.processing:
                     self.ui.show_detecting()
 
-                # Process each detected face
                 for face in faces:
                     startX, startY, endX, endY = face["box"]
                     confidence = face["confidence"]
                     
-                    # Draw face detection box
                     color = (0, 255, 0)
                     y = startY - 10 if startY - 10 > 10 else startY + 10
                     cv2.rectangle(processed_frame, (startX, startY), (endX, endY), color, 2)
                     cv2.putText(processed_frame, f"Face {confidence*100:.1f}%", (startX, y),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
 
-                    # Extract face region with margin for better recognition
                     margin = 0.25
                     h, w = frame.shape[:2]
                     dx = int((endX - startX) * margin)
@@ -121,19 +108,16 @@ class DeviceServiceLocal:
                     y2 = min(h, endY + dy)
                     face_region = frame[y1:y2, x1:x2]
 
-                    # Validate face region
                     if face_region is None or face_region.size == 0:
                         continue
                     h, w = face_region.shape[:2]
                     if h < 30 or w < 30:
                         continue
 
-                    # Prepare face for recognition
                     face_region = cv2.resize(face_region, (160, 160), interpolation=cv2.INTER_AREA)
                     recognized, info = self.recognizer.recognize_face(face_region)
 
                     if recognized:
-                        # Draw recognition indicators on frame
                         name = info.get("name", "Recognized")
                         rec_conf = info.get("confidence", 0)
                         color = (0, 255, 255)
@@ -144,11 +128,9 @@ class DeviceServiceLocal:
                         recognized_info = info
                         break
 
-                # Save processed frame for MJPEG streaming
                 with self.frame_lock:
                     self.latest_frame = processed_frame
 
-                # Handle recognition logic with cooldown
                 current_time = time.time()
                 if faces and not self.processing and (current_time - self.last_recognition_time > self.recognition_cooldown):
                     self.processing = True
@@ -159,7 +141,6 @@ class DeviceServiceLocal:
                     self.last_recognition_time = current_time
                     self.processing = False
                 elif not faces and not self.processing:
-                    # Return to idle when no faces detected
                     self.ui.show_idle(door_locked=(self.local_door_state == "locked"))
 
                 time.sleep(0.05)
@@ -167,14 +148,8 @@ class DeviceServiceLocal:
         thread = threading.Thread(target=loop, daemon=True)
         thread.start()
 
-    # ----------------------------
-    # Image Capture & Upload
-    # ----------------------------
     def capture_and_upload(self, frame, person_name="Unknown", status="unrecognized"):
-        """
-        Capture current frame and upload to backend server
-        Returns the uploaded image URL or None on failure
-        """
+        """Capture and upload frame to backend"""
         try:
             _, buffer = cv2.imencode('.jpg', frame)
             image_bytes = buffer.tobytes()
@@ -192,27 +167,16 @@ class DeviceServiceLocal:
             print("[ERROR] Upload failed:", e)
         return None
 
-    # ----------------------------
-    # Recognition Handlers
-    # ----------------------------
     def handle_recognized_person(self, info, frame):
-        """
-        Handle authorized person detection
-        - Shows welcome message
-        - Unlocks door
-        - Sends notification
-        - Plays success sound
-        """
+        """Handle authorized person detection"""
         name = info.get("name", "Unknown")
         conf = info.get("confidence", 0)
         conf = float(conf) if conf is not None else None
         
         print(f"[INFO] Recognized: {name} ({conf:.2f})")
         
-        # Update UI - Access Granted
         self.ui.show_access_granted(name)
         
-        # Upload image and send notification
         image_url = self.capture_and_upload(frame, name, "recognized")
         if image_url and api_client:
             api_client.send_notification(
@@ -222,55 +186,31 @@ class DeviceServiceLocal:
                 person_name=name
             )
 
-        # Unlock door
         self.relay.open()
         self.local_door_state = "unlocked"
         self.buzzer.beep(100)
         
-        # Keep door open for 5 seconds
         time.sleep(5)
         
-        # Lock door and return to ready state
         self.relay.close()
         self.local_door_state = "locked"
         self.ui.show_idle(door_locked=True)
 
     def handle_unrecognized_person(self, frame, faces_count=1):
-        """
-        Handle unauthorized person detection
-        - Shows access denied message
-        - Keeps door locked
-        - Plays alert sound
-        - Optional: send notification (currently commented out)
-        """
+        """Handle unauthorized person detection"""
         self.relay.close()
         self.local_door_state = "locked"
         
         print(f"[INFO] Unrecognized person detected ({faces_count} faces)")
         
-        # Update UI - Access Denied
         self.ui.show_access_denied()
         self.buzzer.beep(300)
-        
-        # Optional: Upload and notify for unrecognized faces
-        # Uncomment if you want notifications for strangers
-        # image_url = self.capture_and_upload(frame, "Unknown", "unrecognized")
-        # if image_url and api_client:
-        #     api_client.send_notification(
-        #         status="unrecognized",
-        #         image_url=image_url,
-        #         confidence=None,
-        #         person_name="Unknown"
-        #     )
         
         time.sleep(3)
         self.ui.show_idle(door_locked=True)
 
     def initiate_call_to_owner(self):
-        """
-        Initiate a call to the homeowner
-        Triggered by the call button on the UI
-        """
+        """Initiate call to homeowner"""
         if self.call_in_progress:
             return
             
@@ -284,14 +224,8 @@ class DeviceServiceLocal:
             self.call_in_progress = False
             self.ui.show_idle(door_locked=(self.local_door_state == "locked"))
 
-    # ----------------------------
-    # Flask streaming
-    # ----------------------------
     def mjpeg_frame_generator(self):
-        """
-        Generator for MJPEG video stream
-        Used for browser-based video feed viewing
-        """
+        """Generator for MJPEG video stream"""
         while True:
             with self.frame_lock:
                 frame = self.latest_frame
@@ -302,32 +236,22 @@ class DeviceServiceLocal:
             time.sleep(0.03)
 
 
-# ----------------------------
-# Initialize Service
-# ----------------------------
+# Initialize service
 service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
 service.start_camera_loop()
 
-
-# ----------------------------
-# Flask Routes
-# ----------------------------
+# Flask routes
 @app.route('/')
 def index():
-    """Simple HTML page showing the video feed"""
     return "<h1>Raspberry Pi Smart Doorbell</h1><p><img src='/video_feed'></p>"
-
 
 @app.route('/video_feed')
 def video_feed():
-    """MJPEG stream endpoint for browser viewing"""
     return Response(service.mjpeg_frame_generator(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
-
 @app.route('/api/status')
 def status():
-    """System status endpoint"""
     return jsonify({
         "status": "running",
         "camera": "active" if service.camera else "inactive",
@@ -335,13 +259,9 @@ def status():
         "door_state": service.local_door_state
     })
 
-
 @app.route("/api/door/control", methods=["POST"])
 def door_control():
-    """
-    Remote door control endpoint
-    Accepts encrypted commands to lock/unlock the door
-    """
+    """Remote door control endpoint"""
     data = request.json
     encrypted = data.get("data")
 
@@ -349,7 +269,6 @@ def door_control():
         return jsonify({"error": "missing payload"}), 400
 
     payload = decrypt_request(encrypted)
-    print("Decrypted payload:", payload)
     
     if not payload:
         return jsonify({"error": "invalid or expired request"}), 403
@@ -374,18 +293,32 @@ def door_control():
 
     return jsonify({"error": "invalid action"}), 400
 
-
 @app.route("/api/call", methods=["POST"])
 def trigger_call():
-    """API endpoint to trigger call from UI button"""
+    """API endpoint to trigger call"""
     service.initiate_call_to_owner()
     return jsonify({"status": "call_initiated"})
 
-
-# ----------------------------
-# Main Entry Point
-# ----------------------------
 if __name__ == "__main__":
     print("[INFO] Starting Smart Doorbell System")
+    # Start Flask in background thread
+    flask_thread = threading.Thread(
+        target=lambda: app.run(host="0.0.0.0", port=5000, threaded=True, use_reloader=False),
+        daemon=True
+    )
+    flask_thread.start()
+
     print("[INFO] Flask server running on 0.0.0.0:5000")
-    app.run(host="0.0.0.0", port=5000, threaded=True)
+    print("[INFO] UI running in main thread")
+
+    # Main UI loop - runs in main thread
+    try:
+        while True:
+            call_pressed = service.ui.update()
+            if call_pressed:
+                service.initiate_call_to_owner()
+            time.sleep(0.01)  # Small delay
+    except KeyboardInterrupt:
+        print("\n[INFO] Shutting down...")
+        service.relay.cleanup()
+        service.buzzer.cleanup()
