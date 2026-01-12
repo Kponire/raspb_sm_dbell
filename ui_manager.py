@@ -1,3 +1,10 @@
+import os
+
+# MUST be before importing pygame anywhere
+os.environ["SDL_VIDEODRIVER"] = "fbcon"
+os.environ["SDL_FBDEV"] = "/dev/fb1"
+os.environ["SDL_NOMOUSE"] = "1"
+
 import pygame
 import time
 from datetime import datetime
@@ -17,10 +24,10 @@ class UIManager:
             primary_color: Hex color code for branding (default: #c2255c)
         """
         # Set SDL to use framebuffer for Raspberry Pi
-        import os
-        os.environ['SDL_VIDEODRIVER'] = 'fbcon'
-        os.environ['SDL_FBDEV'] = '/dev/fb1'  # fb1 is typically the LCD
-        os.environ['SDL_NOMOUSE'] = '1'  # Disable mouse cursor initially
+        # import os
+        # os.environ['SDL_VIDEODRIVER'] = 'fbcon'
+        # os.environ['SDL_FBDEV'] = '/dev/fb1'  # fb1 is typically the LCD
+        # os.environ['SDL_NOMOUSE'] = '1'  # Disable mouse cursor initially
         
         pygame.init()
         #pygame.display.init()
