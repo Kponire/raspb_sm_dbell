@@ -10,5 +10,8 @@ supabase
 psycopg2-binary
 python-dotenv
 cryptography
+flask-socketio 
+python-socketio 
+eventlet
 RPi.GPIO; platform_system == 'Linux'
 gpiozero; platform_system == 'Linux'
