@@ -23,12 +23,13 @@ class UIManager:
         os.environ['SDL_NOMOUSE'] = '1'  # Disable mouse cursor initially
         
         pygame.init()
-        pygame.mouse.set_visible(True)
+        pygame.display.init()
         
         # Display configuration for 3.5" RPi Display (480x320)
         self.width = 480
         self.height = 320
         self.screen = pygame.display.set_mode((self.width, self.height))
+        pygame.mouse.set_visible(True)
         pygame.display.set_caption("Smart Doorbell")
         
         # Color scheme
