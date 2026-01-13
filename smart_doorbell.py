@@ -372,7 +372,7 @@ if __name__ == "__main__":
     print("[INFO] Web UI available at http://localhost:5000")
     
     # Start keep-alive thread
-    keep_alive = Thread(target=keep_alive_thread, daemon=True)
+    keep_alive = threading.Thread(target=keep_alive_thread, daemon=True)
     keep_alive.start()
     
     socketio.run(app, host="0.0.0.0", port=5000, debug=False)
