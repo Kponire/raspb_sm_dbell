@@ -14,7 +14,8 @@
         }
 
         body {
-            font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;
+            /*font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;*/
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
             color: white;
             overflow: hidden;
@@ -26,7 +27,7 @@
         /* Header */
         .header {
             background: #c2255c;
-            padding: 15px 20px;
+            padding: 10px 20px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.3);
             display: flex;
             justify-content: space-between;
@@ -168,8 +169,8 @@
 
         /* Lock Icon */
         .lock-icon {
-            width: 50px;
-            height: 70px;
+            width: 60px;
+            height: 50px;
             margin: 0 auto 20px;
             position: relative;
         }
@@ -332,7 +333,7 @@
 
     <!-- Header -->
     <div class="header" id="header">
-        <h1>🔔 Smart Doorbell</h1>
+        <h1>Smart Doorbell</h1>
         <div style="display: flex; align-items: center; gap: 15px;">
             <div class="connection-status connecting" id="connectionStatus">
                 <div class="connection-dot connecting"></div>
