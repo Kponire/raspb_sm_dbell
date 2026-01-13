@@ -283,18 +283,18 @@ class DeviceServiceLocal:
 
 
 # Initialize service
-#service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
-#service.start_camera_loop()
+service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
+service.start_camera_loop()
 
-service = None
+# service = None
 
-def start_services():
-    global service
-    service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
-    service.start_camera_loop()
+# def start_services():
+#     global service
+#     service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
+#     service.start_camera_loop()
 
-# Start heavy services in background
-threading.Thread(target=start_services, daemon=True).start()
+# # Start heavy services in background
+# threading.Thread(target=start_services, daemon=True).start()
 
 # Flask routes
 @app.route('/')
