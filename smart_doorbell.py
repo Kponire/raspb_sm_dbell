@@ -12,6 +12,7 @@ from api_client import api_client
 import os
 from datetime import datetime
 from linphone_controller import LinphoneController
+from launch_browser import start_chromium
 
 # Flask app with SocketIO for real-time updates
 app = Flask(__name__)
@@ -282,9 +283,18 @@ class DeviceServiceLocal:
 
 
 # Initialize service
-service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
-service.start_camera_loop()
+#service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
+#service.start_camera_loop()
 
+service = None
+
+def start_services():
+    global service
+    service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
+    service.start_camera_loop()
+
+# Start heavy services in background
+threading.Thread(target=start_services, daemon=True).start()
 
 # Flask routes
 @app.route('/')
@@ -394,6 +404,7 @@ if __name__ == "__main__":
     print("[INFO] Starting Smart Doorbell System")
     print("[INFO] Web UI available at http://localhost:5000")
     
+    start_chromium()
     # Start keep-alive thread
     keep_alive = threading.Thread(target=keep_alive_thread, daemon=True)
     keep_alive.start()
