@@ -427,7 +427,7 @@
             }
             
             // Start new timer to hide UI after specified time
-            // uiHideTimer = setTimeout(hideUI, hideUIAfter);
+            uiHideTimer = setTimeout(hideUI, hideUIAfter);
         }
 
         // Start the initial hide timer
@@ -471,7 +471,7 @@
             updateBackground(state);
 
             // Show UI during important events
-            if (state !== 'idle' && uiHidden) {
+            if (state !== 'idle1' && uiHidden) {
                 showUI();
             }
 
