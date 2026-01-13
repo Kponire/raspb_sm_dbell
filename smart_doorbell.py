@@ -11,6 +11,7 @@ from hardware import Relay, Buzzer
 from api_client import api_client
 import os
 from datetime import datetime
+from linphone_controller import LinphoneController
 
 # Flask app with SocketIO for real-time updates
 app = Flask(__name__)
@@ -61,6 +62,14 @@ class DeviceServiceLocal:
         print("[INFO] System Ready!")
         self.system_status = "ready"
         self._emit_status("idle", "System Ready", door_locked=True)
+
+        print("[INFO] Initializing Linphone...")
+        self.linphone = LinphoneController(
+            sip_target="6001@10.30.132.143",
+            soundcard_id=5  # ALSA bcm2835 Headphones
+        )
+        self.linphone.start()
+
 
     def _init_api_client(self):
         """Initialize connection to backend API"""
@@ -231,20 +240,34 @@ class DeviceServiceLocal:
         self._emit_status("idle", "Monitoring for faces", door_locked=True)
 
     def initiate_call_to_owner(self):
-        """Initiate call to homeowner"""
+        """Initiate SIP call using linphonec"""
         if self.call_in_progress:
             return
-            
-        print("[INFO] Initiating call to owner")
+
+        self.call_in_progress = True
+        print("[INFO] Initiating SIP call to owner")
+
         self._emit_status("calling", "Calling owner...")
-        
-        if api_client and api_client.initiate_call():
-            self.call_in_progress = True
-            self.buzzer.beep(100)
-            time.sleep(3)
+        self.buzzer.beep(100)
+
+        try:
+            self.linphone.call()
+
+            # Optional: auto hangup after 30s
+            # threading.Timer(30, self._end_call).start()
+
+        except Exception as e:
+            print("[ERROR] Call failed:", e)
             self.call_in_progress = False
-            self._emit_status("idle", "Monitoring for faces", 
+            self._emit_status("idle", "Call failed",
                             door_locked=(self.local_door_state == "locked"))
+    
+    def _end_call(self):
+        print("[INFO] Ending call")
+        self.linphone.hangup()
+        self.call_in_progress = False
+        self._emit_status("idle", "Monitoring for faces",
+                        door_locked=(self.local_door_state == "locked"))
 
     def mjpeg_frame_generator(self):
         """Generator for MJPEG video stream"""
@@ -376,3 +399,12 @@ if __name__ == "__main__":
     keep_alive.start()
     
     socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+
+import atexit
+
+@atexit.register
+def cleanup():
+    try:
+        service.linphone.stop()
+    except Exception:
+        pass
