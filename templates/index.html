@@ -43,6 +43,54 @@
             font-weight: 300;
         }
 
+        /* Connection Status Indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-left: 15px;
+        }
+
+        .connection-status.online {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+
+        .connection-status.offline {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
+
+        .connection-status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .connection-dot.online {
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
+
+        .connection-dot.offline {
+            background: #f44336;
+            box-shadow: 0 0 10px #f44336;
+        }
+
+        .connection-dot.connecting {
+            background: #ffc107;
+            box-shadow: 0 0 10px #ffc107;
+            animation: pulse 1.5s infinite;
+        }
+
         /* Main Content */
         .content {
             flex: 1;
@@ -278,7 +326,13 @@
     <!-- Header -->
     <div class="header" id="header">
         <h1>🔔 Smart Doorbell</h1>
-        <div class="time" id="time">--:--</div>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div class="connection-status connecting" id="connectionStatus">
+                <div class="connection-dot connecting"></div>
+                <span id="connectionText">Connecting...</span>
+            </div>
+            <div class="time" id="time">--:--</div>
+        </div>
     </div>
 
     <!-- Main Content -->
@@ -313,30 +367,184 @@
     </div>
 
     <script>
-        // Initialize Socket.IO with explicit connection options
-        const socket = io({
-            reconnection: true,
-            reconnectionAttempts: 5,
-            reconnectionDelay: 1000,
-            reconnectionDelayMax: 5000,
-            timeout: 20000
-        });
-
-        // Current state
+        // Connection state
         let currentState = 'idle';
+        let isConnected = false;
+        let connectionAttempts = 0;
+        const maxConnectionAttempts = 10;
+        let reconnectTimeout = null;
+
+        // Update connection status UI
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connectionStatus');
+            const textElement = document.getElementById('connectionText');
+            const dotElement = statusElement.querySelector('.connection-dot');
+            
+            // Remove all classes
+            statusElement.className = 'connection-status';
+            dotElement.className = 'connection-dot';
+            
+            // Add appropriate classes
+            statusElement.classList.add(status);
+            dotElement.classList.add(status);
+            
+            textElement.textContent = message;
+        }
+
+        // Initialize Socket.IO with optimized settings
+        function initializeSocket() {
+            console.log('Initializing WebSocket connection...');
+            
+            // Clear any existing reconnection timeout
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+            
+            // Create socket with robust configuration
+            const socket = io({
+                reconnection: true,
+                reconnectionAttempts: maxConnectionAttempts,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 30000,  // Increased timeout to 30 seconds
+                pingTimeout: 20000,  // Increased ping timeout
+                pingInterval: 10000,  // Send pings every 10 seconds
+                transports: ['websocket', 'polling'],  // Try websocket first, then polling
+                forceNew: false,
+                autoConnect: true,
+                rememberUpgrade: true
+            });
+
+            // Socket.IO event handlers
+            socket.on('connect', () => {
+                console.log('✓ Connected to doorbell server');
+                isConnected = true;
+                connectionAttempts = 0;
+                updateConnectionStatus('online', 'Connected');
+                
+                // Request initial status
+                setTimeout(() => {
+                    socket.emit('request_status');
+                }, 500);
+            });
+
+            socket.on('status_update', (data) => {
+                console.log('Status update:', data);
+                renderStatus(data);
+            });
+
+            socket.on('disconnect', (reason) => {
+                console.log('✗ Disconnected from doorbell:', reason);
+                isConnected = false;
+                
+                if (reason === 'io server disconnect') {
+                    // Server disconnected us, try to reconnect
+                    updateConnectionStatus('connecting', 'Reconnecting...');
+                    socket.connect();
+                } else if (reason === 'io client disconnect') {
+                    // Client disconnected intentionally
+                    updateConnectionStatus('offline', 'Disconnected');
+                } else {
+                    // Unexpected disconnect (network issues, etc.)
+                    updateConnectionStatus('connecting', 'Reconnecting...');
+                    
+                    // Show disconnected status
+                    renderStatus({
+                        state: 'loading',
+                        message: 'Connection lost. Reconnecting...',
+                        door_locked: true
+                    });
+                }
+            });
+
+            socket.on('connect_error', (error) => {
+                console.log('Connection error:', error);
+                isConnected = false;
+                connectionAttempts++;
+                
+                if (connectionAttempts <= maxConnectionAttempts) {
+                    updateConnectionStatus('connecting', `Connecting (${connectionAttempts}/${maxConnectionAttempts})...`);
+                    
+                    renderStatus({
+                        state: 'loading',
+                        message: `Connection attempt ${connectionAttempts} of ${maxConnectionAttempts}...`,
+                        door_locked: true
+                    });
+                } else {
+                    updateConnectionStatus('offline', 'Connection Failed');
+                    
+                    renderStatus({
+                        state: 'access_denied',
+                        message: 'Cannot connect to server. Please check network.',
+                        door_locked: true
+                    });
+                    
+                    // Try to reconnect after a longer delay
+                    reconnectTimeout = setTimeout(() => {
+                        console.log('Attempting to reconnect...');
+                        connectionAttempts = 0;
+                        socket.connect();
+                    }, 10000);
+                }
+            });
+
+            socket.on('reconnect', (attemptNumber) => {
+                console.log('✓ Reconnected after', attemptNumber, 'attempts');
+                updateConnectionStatus('online', 'Connected');
+                
+                // Request status update after reconnection
+                socket.emit('request_status');
+            });
+
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log('Reconnection attempt:', attemptNumber);
+                updateConnectionStatus('connecting', `Reconnecting (${attemptNumber}/${maxConnectionAttempts})...`);
+            });
+
+            socket.on('reconnect_failed', () => {
+                console.log('Reconnection failed');
+                updateConnectionStatus('offline', 'Connection Lost');
+                
+                renderStatus({
+                    state: 'access_denied',
+                    message: 'Connection lost. Refresh page to retry.',
+                    door_locked: true
+                });
+            });
+
+            socket.on('ping', () => {
+                console.log('Ping received from server');
+            });
+
+            socket.on('pong', (latency) => {
+                console.log('Pong received, latency:', latency, 'ms');
+            });
+
+            return socket;
+        }
+
+        // Initialize socket
+        const socket = initializeSocket();
 
         // Update clock
         function updateClock() {
             const now = new Date();
             const hours = String(now.getHours()).padStart(2, '0');
             const minutes = String(now.getMinutes()).padStart(2, '0');
-            document.getElementById('time').textContent = `${hours}:${minutes}`;
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
         }
         setInterval(updateClock, 1000);
         updateClock();
 
         // Call owner function
         function callOwner() {
+            if (!isConnected) {
+                alert('Not connected to server. Please wait for connection.');
+                return;
+            }
+            
             const button = document.getElementById('callButton');
             button.disabled = true;
             socket.emit('call_owner');
@@ -368,6 +576,7 @@
 
             switch(state) {
                 case 'idle':
+                case 'ready':
                     const lockColor = data.door_locked ? '#f44336' : '#4caf50';
                     html = `
                         <div class="lock-icon" style="color: ${lockColor}">
@@ -421,20 +630,6 @@
                     `;
                     break;
 
-                case 'ready':
-                    const readyLockColor = data.door_locked ? '#f44336' : '#4caf50';
-                    html = `
-                        <div class="lock-icon" style="color: ${readyLockColor}">
-                            <div class="lock-shackle"></div>
-                            <div class="lock-body"></div>
-                        </div>
-                        <div class="status-message">
-                            ${data.door_locked ? 'Door Locked' : 'Door Unlocked'}
-                        </div>
-                        <div class="status-subtitle">${data.message}</div>
-                    `;
-                    break;
-
                 default:
                     html = `
                         <div class="status-message">${data.message}</div>
@@ -450,14 +645,10 @@
             
             streamImg.onerror = function() {
                 console.log('Stream error, reloading...');
-                // Try to reload the stream after 2 seconds
-                setTimeout(() => {
-                    streamImg.src = '/video_feed?_=' + new Date().getTime();
-                    handleStreamError(); // Re-attach error handler
-                }, 2000);
+                // Try to reload the stream with cache busting
+                streamImg.src = '/video_feed?_=' + new Date().getTime();
             };
             
-            // Also add onload handler to check if stream is working
             streamImg.onload = function() {
                 console.log('Stream loaded successfully');
             };
@@ -466,64 +657,25 @@
         // Initialize stream error handling
         handleStreamError();
 
-        // Socket.IO event handlers
-        socket.on('connect', () => {
-            console.log('Connected to doorbell');
-            // Request initial status
-            socket.emit('request_status');
-        });
-
-        socket.on('status_update', (data) => {
-            console.log('Status update:', data);
-            renderStatus(data);
-        });
-
-        socket.on('disconnect', (reason) => {
-            console.log('Disconnected from doorbell:', reason);
+        // Add manual reconnect button (optional, can be added to UI)
+        function manualReconnect() {
+            console.log('Manual reconnect requested');
+            updateConnectionStatus('connecting', 'Reconnecting...');
             
-            // Show disconnected status
             renderStatus({
                 state: 'loading',
-                message: 'Reconnecting to system...',
+                message: 'Attempting to reconnect...',
                 door_locked: true
             });
-        });
-
-        socket.on('connect_error', (error) => {
-            console.log('Connection error:', error);
             
-            // Show connection error status
-            renderStatus({
-                state: 'loading',
-                message: 'Connection error. Retrying...',
-                door_locked: true
-            });
-        });
+            // Force reconnection
+            socket.disconnect();
+            socket.connect();
+        }
 
-        socket.on('reconnect', (attemptNumber) => {
-            console.log('Reconnected after', attemptNumber, 'attempts');
-            
-            // Request status update after reconnection
-            socket.emit('request_status');
-        });
-
-        socket.on('reconnect_attempt', (attemptNumber) => {
-            console.log('Reconnection attempt:', attemptNumber);
-        });
-
-        socket.on('reconnect_failed', () => {
-            console.log('Reconnection failed');
-            
-            // Show connection failed status
-            renderStatus({
-                state: 'access_denied',
-                message: 'Connection failed. Please refresh page.',
-                door_locked: true
-            });
-        });
-
-        // Request initial status
-        socket.emit('request_status');
+        // Add to window for debugging
+        window.manualReconnect = manualReconnect;
+        window.socket = socket;
 
         // Initial render
         renderStatus({
