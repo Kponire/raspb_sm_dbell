@@ -31,6 +31,16 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            transition: opacity 0.5s ease, height 0.5s ease;
+            height: 70px;
+            opacity: 1;
+        }
+
+        .header.hidden {
+            opacity: 0;
+            height: 0;
+            padding: 0;
+            overflow: hidden;
         }
 
         .header h1 {
@@ -54,10 +64,50 @@
             position: relative;
         }
 
+        /* Livestream Container */
+        .livestream-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 200px;
+            height: 150px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 3px solid #c2255c;
+            z-index: 100;
+            background: #000;
+            transition: transform 0.3s ease;
+        }
+
+        .livestream-container:hover {
+            transform: scale(1.05);
+        }
+
+        .livestream-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .livestream-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(194, 37, 92, 0.8);
+            color: white;
+            padding: 5px;
+            font-size: 12px;
+            text-align: center;
+            font-weight: bold;
+        }
+
         /* Status Display */
         .status-container {
             text-align: center;
             z-index: 10;
+            padding: 20px;
         }
 
         .status-icon {
@@ -148,6 +198,16 @@
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+            transition: opacity 0.5s ease, height 0.5s ease;
+            height: 70px;
+            opacity: 1;
+        }
+
+        .bottom-bar.hidden {
+            opacity: 0;
+            height: 0;
+            padding: 0;
+            overflow: hidden;
         }
 
         .status-indicators {
@@ -168,6 +228,32 @@
             border-radius: 50%;
             background: #4caf50;
             box-shadow: 0 0 10px #4caf50;
+        }
+
+        /* Show UI Button */
+        .show-ui-button {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background: #c2255c;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .show-ui-button:hover {
+            opacity: 1;
         }
 
         /* Call Button */
@@ -241,20 +327,27 @@
     <div class="bg-gradient bg-calling" id="bg-calling"></div>
 
     <!-- Header -->
-    <div class="header">
+    <div class="header" id="header">
         <h1>🔔 Smart Doorbell</h1>
         <div class="time" id="time">--:--</div>
     </div>
 
     <!-- Main Content -->
     <div class="content">
+        <!-- Livestream Container -->
+        <div class="livestream-container" id="livestreamContainer">
+            <img id="livestream" src="/video_feed" alt="Live Stream">
+            <div class="livestream-label">VISITOR VIEW</div>
+        </div>
+
+        <!-- Status Display -->
         <div class="status-container" id="statusContainer">
             <!-- Dynamic content will be injected here -->
         </div>
     </div>
 
     <!-- Bottom Bar -->
-    <div class="bottom-bar">
+    <div class="bottom-bar" id="bottomBar">
         <div class="status-indicators">
             <div class="indicator">
                 <div class="indicator-dot"></div>
@@ -270,12 +363,20 @@
         </button>
     </div>
 
+    <!-- Show UI Button (appears when UI is hidden) -->
+    <button class="show-ui-button" id="showUIButton" onclick="showUI()" style="display: none;">
+        👁
+    </button>
+
     <script>
         // Initialize Socket.IO
         const socket = io();
 
         // Current state
         let currentState = 'idle';
+        let uiHidden = false;
+        let uiHideTimer = null;
+        let hideUIAfter = 5000; // 5 seconds
 
         // Update clock
         function updateClock() {
@@ -287,6 +388,56 @@
         setInterval(updateClock, 1000);
         updateClock();
 
+        // UI Show/Hide functions
+        function hideUI() {
+            const header = document.getElementById('header');
+            const bottomBar = document.getElementById('bottomBar');
+            const showUIButton = document.getElementById('showUIButton');
+            
+            header.classList.add('hidden');
+            bottomBar.classList.add('hidden');
+            showUIButton.style.display = 'flex';
+            uiHidden = true;
+            
+            // Clear any existing timer
+            if (uiHideTimer) {
+                clearTimeout(uiHideTimer);
+                uiHideTimer = null;
+            }
+        }
+
+        function showUI() {
+            const header = document.getElementById('header');
+            const bottomBar = document.getElementById('bottomBar');
+            const showUIButton = document.getElementById('showUIButton');
+            
+            header.classList.remove('hidden');
+            bottomBar.classList.remove('hidden');
+            showUIButton.style.display = 'none';
+            uiHidden = false;
+            
+            // Restart the hide timer
+            resetHideTimer();
+        }
+
+        function resetHideTimer() {
+            // Clear existing timer
+            if (uiHideTimer) {
+                clearTimeout(uiHideTimer);
+            }
+            
+            // Start new timer to hide UI after specified time
+            uiHideTimer = setTimeout(hideUI, hideUIAfter);
+        }
+
+        // Start the initial hide timer
+        resetHideTimer();
+
+        // Add event listeners to reset timer on interaction
+        document.addEventListener('mousemove', resetHideTimer);
+        document.addEventListener('touchstart', resetHideTimer);
+        document.addEventListener('click', resetHideTimer);
+
         // Call owner function
         function callOwner() {
             const button = document.getElementById('callButton');
@@ -295,6 +446,9 @@
             setTimeout(() => {
                 button.disabled = false;
             }, 5000);
+            
+            // Reset UI hide timer when button is pressed
+            resetHideTimer();
         }
 
         // Update background
@@ -315,6 +469,11 @@
             currentState = state;
 
             updateBackground(state);
+
+            // Show UI during important events
+            if (state !== 'idle' && uiHidden) {
+                showUI();
+            }
 
             let html = '';
 
@@ -381,6 +540,31 @@
 
             container.innerHTML = html;
         }
+
+        // Handle livestream errors
+        function handleStreamError() {
+            const streamImg = document.getElementById('livestream');
+            const container = document.getElementById('livestreamContainer');
+            
+            streamImg.onerror = function() {
+                container.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: white; text-align: center; padding: 10px;">
+                        <div>
+                            <div style="font-size: 40px;">📹</div>
+                            <div style="font-size: 14px; margin-top: 5px;">Stream Loading...</div>
+                        </div>
+                    </div>
+                `;
+                // Try to reload the stream after 3 seconds
+                setTimeout(() => {
+                    container.innerHTML = '<img id="livestream" src="/video_feed" alt="Live Stream"><div class="livestream-label">VISITOR VIEW</div>';
+                    handleStreamError(); // Re-attach error handler
+                }, 3000);
+            };
+        }
+
+        // Initialize stream error handling
+        handleStreamError();
 
         // Socket.IO event handlers
         socket.on('connect', () => {
