@@ -331,6 +331,16 @@ def handle_connect():
         'timestamp': datetime.now().strftime("%H:%M:%S")
     })
 
+@socketio.on('request_status')
+def handle_request_status():
+    """Send current status to client"""
+    emit('status_update', {
+        'state': service.system_status,
+        'message': 'System Ready',
+        'door_locked': service.local_door_state == "locked",
+        'timestamp': datetime.now().strftime("%H:%M:%S")
+    })
+
 @socketio.on('disconnect')
 def handle_disconnect():
     """Handle client disconnection"""
