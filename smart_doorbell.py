@@ -1,359 +1,688 @@
-import threading
-import time
-import cv2
-from flask import Flask, Response, jsonify, request, render_template
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit
-from camera import Camera
-from security import decrypt_request
-from recognizer import Recognizer
-from hardware import Relay, Buzzer
-from api_client import api_client
-import os
-from datetime import datetime
-
-# Flask app with SocketIO for real-time updates
-app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
-CORS(app)
-socketio = SocketIO(app, cors_allowed_origins="*")
-
-class DeviceServiceLocal:
-    """Smart Doorbell Device Service with web-based UI"""
-    
-    def __init__(self, device_id, base_url):
-        self.device_id = device_id if device_id else os.getenv("DEVICE_ID")
-        self.base_url = base_url if base_url else os.getenv("BACKEND_URL")
-
-        print("[INFO] Initializing Camera...")
-        self.camera = Camera(resolution=(640, 480), framerate=15)
-        
-        print("[INFO] Loading Face Recognition...")
-        self.recognizer = Recognizer(threshold=0.60, base_url=self.base_url)
-        self.face_detector = self.recognizer.face_detector
-
-        print("[INFO] Initializing Hardware...")
-        self.relay = Relay(4)
-        self.buzzer = Buzzer(27)
-
-        # State
-        self.processing = False
-        self.call_in_progress = False
-        self.local_door_state = "locked"
-        self.last_recognition_time = 0
-        self.recognition_cooldown = 3
-        self.system_status = "initializing"
-
-        # MJPEG frame
-        self.latest_frame = None
-        self.frame_lock = threading.Lock()
-
-        print("[INFO] Connecting to Server...")
-        self._init_api_client()
-        
-        print("[INFO] System Ready!")
-        self.system_status = "ready"
-        self._emit_status("idle", "System Ready", door_locked=True)
-
-    def _init_api_client(self):
-        """Initialize connection to backend API"""
-        global api_client
-        from api_client import init_api_client
-        api_client = init_api_client(self.base_url, self.device_id, "Smart Doorbell")
-
-    def _emit_status(self, state, message, **kwargs):
-        """Emit status update to web UI via SocketIO"""
-        data = {
-            "state": state,
-            "message": message,
-            "door_locked": kwargs.get("door_locked", self.local_door_state == "locked"),
-            "timestamp": datetime.now().strftime("%H:%M:%S"),
-            **kwargs
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Smart Doorbell</title>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
         }
-        socketio.emit('status_update', data)
 
-    def start_camera_loop(self):
-        """Background thread for camera capture and face processing"""
-        self.camera.start_capture()
-        
-        self._emit_status("loading", "Loading Face Database...")
-        self.recognizer.load_embeddings_from_backend()
-        
-        self._emit_status("idle", "Monitoring for faces", door_locked=True)
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
 
-        def loop():
-            while True:
-                frame = self.camera.read()
-                if frame is None:
-                    time.sleep(0.05)
-                    continue
+        /* Header */
+        .header {
+            background: #c2255c;
+            padding: 15px 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-                faces = self.face_detector.detect(frame)
-                processed_frame = frame.copy()
-                recognized_info = None
-                face_detected = len(faces) > 0
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
 
-                if face_detected and not self.processing:
-                    self._emit_status("detecting", "Face detected - Analyzing...")
+        .time {
+            font-size: 18px;
+            font-weight: 300;
+        }
 
-                for face in faces:
-                    startX, startY, endX, endY = face["box"]
-                    confidence = face["confidence"]
-                    
-                    color = (0, 255, 0)
-                    y = startY - 10 if startY - 10 > 10 else startY + 10
-                    cv2.rectangle(processed_frame, (startX, startY), (endX, endY), color, 2)
-                    cv2.putText(processed_frame, f"Face {confidence*100:.1f}%", (startX, y),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 2)
+        /* Connection Status Indicator */
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            margin-left: 15px;
+        }
 
-                    margin = 0.25
-                    h, w = frame.shape[:2]
-                    dx = int((endX - startX) * margin)
-                    dy = int((endY - startY) * margin)
-                    x1 = max(0, startX - dx)
-                    y1 = max(0, startY - dy)
-                    x2 = min(w, endX + dx)
-                    y2 = min(h, endY + dy)
-                    face_region = frame[y1:y2, x1:x2]
+        .connection-status.online {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
 
-                    if face_region is None or face_region.size == 0:
-                        continue
-                    h, w = face_region.shape[:2]
-                    if h < 30 or w < 30:
-                        continue
+        .connection-status.offline {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
 
-                    face_region = cv2.resize(face_region, (160, 160), interpolation=cv2.INTER_AREA)
-                    recognized, info = self.recognizer.recognize_face(face_region)
+        .connection-status.connecting {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+        }
 
-                    if recognized:
-                        name = info.get("name", "Recognized")
-                        rec_conf = info.get("confidence", 0)
-                        color = (0, 255, 255)
-                        cv2.rectangle(processed_frame, (startX, startY), (endX, endY), color, 3)
-                        y_text = y-20 if y-20 > 10 else y+20
-                        cv2.putText(processed_frame, f"{name} {rec_conf*100:.1f}%", (startX, y_text),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                        recognized_info = info
-                        break
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
 
-                with self.frame_lock:
-                    self.latest_frame = processed_frame
+        .connection-dot.online {
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
 
-                current_time = time.time()
-                if faces and not self.processing and (current_time - self.last_recognition_time > self.recognition_cooldown):
-                    self.processing = True
-                    if recognized_info:
-                        self.handle_recognized_person(recognized_info, frame)
-                    else:
-                        self.handle_unrecognized_person(frame, len(faces))
-                    self.last_recognition_time = current_time
-                    self.processing = False
-                elif not faces and not self.processing:
-                    if self.system_status != "idle":
-                        self.system_status = "idle"
-                        self._emit_status("idle", "Monitoring for faces", 
-                                        door_locked=(self.local_door_state == "locked"))
+        .connection-dot.offline {
+            background: #f44336;
+            box-shadow: 0 0 10px #f44336;
+        }
 
-                time.sleep(0.05)
+        .connection-dot.connecting {
+            background: #ffc107;
+            box-shadow: 0 0 10px #ffc107;
+            animation: pulse 1.5s infinite;
+        }
 
-        thread = threading.Thread(target=loop, daemon=True)
-        thread.start()
+        /* Main Content */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            position: relative;
+        }
 
-    def capture_and_upload(self, frame, person_name="Unknown", status="unrecognized"):
-        """Capture and upload frame to backend"""
-        try:
-            _, buffer = cv2.imencode('.jpg', frame)
-            image_bytes = buffer.tobytes()
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{person_name}_{status}_{timestamp}.jpg"
+        /* Livestream Container */
+        .livestream-container {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 220px;
+            height: 165px;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 3px solid #c2255c;
+            z-index: 100;
+            background: #000;
+        }
 
-            if api_client:
-                return api_client.upload_captured_face(
-                    image_bytes=image_bytes,
-                    filename=filename,
-                    person_name=person_name,
-                    status=status
-                )
-        except Exception as e:
-            print("[ERROR] Upload failed:", e)
-        return None
+        .livestream-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-    def handle_recognized_person(self, info, frame):
-        """Handle authorized person detection"""
-        name = info.get("name", "Unknown")
-        conf = info.get("confidence", 0)
-        conf = float(conf) if conf is not None else None
-        
-        print(f"[INFO] Recognized: {name} ({conf:.2f})")
-        
-        self._emit_status("access_granted", f"Welcome {name}!", 
-                         person_name=name, door_locked=False)
-        
-        image_url = self.capture_and_upload(frame, name, "recognized")
-        if image_url and api_client:
-            api_client.send_notification(
-                status="recognized",
-                image_url=image_url,
-                confidence=conf,
-                person_name=name
-            )
+        .livestream-label {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(194, 37, 92, 0.8);
+            color: white;
+            padding: 6px;
+            font-size: 13px;
+            text-align: center;
+            font-weight: bold;
+        }
 
-        self.relay.open()
-        self.local_door_state = "unlocked"
-        self.buzzer.beep(100)
-        
-        time.sleep(5)
-        
-        self.relay.close()
-        self.local_door_state = "locked"
-        self.system_status = "idle"
-        self._emit_status("idle", "Door locked - Monitoring", door_locked=True)
+        /* Status Display */
+        .status-container {
+            text-align: center;
+            z-index: 10;
+            padding: 20px;
+        }
 
-    def handle_unrecognized_person(self, frame, faces_count=1):
-        """Handle unauthorized person detection"""
-        self.relay.close()
-        self.local_door_state = "locked"
-        
-        print(f"[INFO] Unrecognized person detected ({faces_count} faces)")
-        
-        self._emit_status("access_denied", "Unknown Person Detected", door_locked=True)
-        self.buzzer.beep(300)
-        
-        time.sleep(3)
-        self.system_status = "idle"
-        self._emit_status("idle", "Monitoring for faces", door_locked=True)
+        .status-icon {
+            font-size: 80px;
+            margin-bottom: 20px;
+            animation: fadeIn 0.3s ease;
+        }
 
-    def initiate_call_to_owner(self):
-        """Initiate call to homeowner"""
-        if self.call_in_progress:
-            return
+        .status-message {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .status-subtitle {
+            font-size: 18px;
+            color: #aaa;
+            animation: fadeIn 0.3s ease;
+        }
+
+        /* Lock Icon */
+        .lock-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 20px;
+            position: relative;
+        }
+
+        .lock-body {
+            width: 60px;
+            height: 70px;
+            background: currentColor;
+            border-radius: 8px;
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .lock-shackle {
+            width: 40px;
+            height: 40px;
+            border: 8px solid currentColor;
+            border-bottom: none;
+            border-radius: 40px 40px 0 0;
+            position: absolute;
+            top: 0;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        /* Colors for different states */
+        .state-idle { color: #f44336; }
+        .state-detecting { color: #ffc107; }
+        .state-access-granted { color: #4caf50; }
+        .state-access-denied { color: #f44336; }
+        .state-calling { color: #2196f3; }
+        .state-loading { color: #2196f3; }
+
+        /* Background effects */
+        .bg-gradient {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        .bg-gradient.active {
+            opacity: 1;
+        }
+
+        .bg-idle { background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); }
+        .bg-detecting { background: linear-gradient(135deg, #ff6f00 0%, #ffa726 100%); }
+        .bg-access-granted { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); }
+        .bg-access-denied { background: linear-gradient(135deg, #c62828 0%, #ef5350 100%); }
+        .bg-calling { background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%); }
+
+        /* Bottom Bar */
+        .bottom-bar {
+            background: #2d2d2d;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+        }
+
+        .status-indicators {
+            display: flex;
+            gap: 15px;
+            font-size: 14px;
+        }
+
+        .indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .indicator-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4caf50;
+            box-shadow: 0 0 10px #4caf50;
+        }
+
+        /* Call Button */
+        .call-button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);
+            transition: all 0.3s ease;
+            touch-action: manipulation;
+        }
+
+        .call-button:active {
+            transform: scale(0.95);
+            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+        }
+
+        .call-button:disabled {
+            background: #666;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .pulse {
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .spin {
+            animation: spin 2s linear infinite;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            width: 80px;
+            height: 80px;
+            border: 8px solid rgba(255,255,255,0.1);
+            border-top-color: #2196f3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Background Gradients -->
+    <div class="bg-gradient bg-idle active" id="bg-idle"></div>
+    <div class="bg-gradient bg-detecting" id="bg-detecting"></div>
+    <div class="bg-gradient bg-access-granted" id="bg-access-granted"></div>
+    <div class="bg-gradient bg-access-denied" id="bg-access-denied"></div>
+    <div class="bg-gradient bg-calling" id="bg-calling"></div>
+
+    <!-- Header -->
+    <div class="header" id="header">
+        <h1>🔔 Smart Doorbell</h1>
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div class="connection-status connecting" id="connectionStatus">
+                <div class="connection-dot connecting"></div>
+                <span id="connectionText">Connecting...</span>
+            </div>
+            <div class="time" id="time">--:--</div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content">
+        <!-- Livestream Container -->
+        <div class="livestream-container" id="livestreamContainer">
+            <img id="livestream" src="/video_feed" alt="Live Stream">
+            <div class="livestream-label">VISITOR VIEW</div>
+        </div>
+
+        <!-- Status Display -->
+        <div class="status-container" id="statusContainer">
+            <!-- Dynamic content will be injected here -->
+        </div>
+    </div>
+
+    <!-- Bottom Bar -->
+    <div class="bottom-bar" id="bottomBar">
+        <div class="status-indicators">
+            <div class="indicator">
+                <div class="indicator-dot"></div>
+                <span>Camera Active</span>
+            </div>
+            <div class="indicator">
+                <div class="indicator-dot"></div>
+                <span>System Online</span>
+            </div>
+        </div>
+        <button class="call-button" id="callButton" onclick="callOwner()">
+            📞 Call Owner
+        </button>
+    </div>
+
+    <script>
+        // Connection state
+        let currentState = 'idle';
+        let isConnected = false;
+        let connectionAttempts = 0;
+        const maxConnectionAttempts = 10;
+        let reconnectTimeout = null;
+
+        // Update connection status UI
+        function updateConnectionStatus(status, message) {
+            const statusElement = document.getElementById('connectionStatus');
+            const textElement = document.getElementById('connectionText');
+            const dotElement = statusElement.querySelector('.connection-dot');
             
-        print("[INFO] Initiating call to owner")
-        self._emit_status("calling", "Calling owner...")
-        
-        if api_client and api_client.initiate_call():
-            self.call_in_progress = True
-            self.buzzer.beep(100)
-            time.sleep(3)
-            self.call_in_progress = False
-            self._emit_status("idle", "Monitoring for faces", 
-                            door_locked=(self.local_door_state == "locked"))
+            // Remove all classes
+            statusElement.className = 'connection-status';
+            dotElement.className = 'connection-dot';
+            
+            // Add appropriate classes
+            statusElement.classList.add(status);
+            dotElement.classList.add(status);
+            
+            textElement.textContent = message;
+        }
 
-    def mjpeg_frame_generator(self):
-        """Generator for MJPEG video stream"""
-        while True:
-            with self.frame_lock:
-                frame = self.latest_frame
-            if frame is not None:
-                _, buffer = cv2.imencode('.jpg', frame)
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-            time.sleep(0.03)
+        // Initialize Socket.IO with optimized settings
+        function initializeSocket() {
+            console.log('Initializing WebSocket connection...');
+            
+            // Clear any existing reconnection timeout
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+                reconnectTimeout = null;
+            }
+            
+            // Create socket with robust configuration
+            const socket = io({
+                reconnection: true,
+                reconnectionAttempts: maxConnectionAttempts,
+                reconnectionDelay: 1000,
+                reconnectionDelayMax: 5000,
+                timeout: 30000,  // Increased timeout to 30 seconds
+                pingTimeout: 20000,  // Increased ping timeout
+                pingInterval: 10000,  // Send pings every 10 seconds
+                transports: ['websocket', 'polling'],  // Try websocket first, then polling
+                forceNew: false,
+                autoConnect: true,
+                rememberUpgrade: true
+            });
 
+            // Socket.IO event handlers
+            socket.on('connect', () => {
+                console.log('✓ Connected to doorbell server');
+                isConnected = true;
+                connectionAttempts = 0;
+                updateConnectionStatus('online', 'Connected');
+                
+                // Request initial status
+                setTimeout(() => {
+                    socket.emit('request_status');
+                }, 500);
+            });
 
-# Initialize service
-service = DeviceServiceLocal(os.getenv("DEVICE_ID"), os.getenv("BACKEND_URL"))
-service.start_camera_loop()
+            socket.on('status_update', (data) => {
+                console.log('Status update:', data);
+                renderStatus(data);
+            });
 
+            socket.on('disconnect', (reason) => {
+                console.log('✗ Disconnected from doorbell:', reason);
+                isConnected = false;
+                
+                if (reason === 'io server disconnect') {
+                    // Server disconnected us, try to reconnect
+                    updateConnectionStatus('connecting', 'Reconnecting...');
+                    socket.connect();
+                } else if (reason === 'io client disconnect') {
+                    // Client disconnected intentionally
+                    updateConnectionStatus('offline', 'Disconnected');
+                } else {
+                    // Unexpected disconnect (network issues, etc.)
+                    updateConnectionStatus('connecting', 'Reconnecting...');
+                    
+                    // Show disconnected status
+                    renderStatus({
+                        state: 'loading',
+                        message: 'Connection lost. Reconnecting...',
+                        door_locked: true
+                    });
+                }
+            });
 
-# Flask routes
-@app.route('/')
-def index():
-    """Main UI page"""
-    return render_template('index.html')
+            socket.on('connect_error', (error) => {
+                console.log('Connection error:', error);
+                isConnected = false;
+                connectionAttempts++;
+                
+                if (connectionAttempts <= maxConnectionAttempts) {
+                    updateConnectionStatus('connecting', `Connecting (${connectionAttempts}/${maxConnectionAttempts})...`);
+                    
+                    renderStatus({
+                        state: 'loading',
+                        message: `Connection attempt ${connectionAttempts} of ${maxConnectionAttempts}...`,
+                        door_locked: true
+                    });
+                } else {
+                    updateConnectionStatus('offline', 'Connection Failed');
+                    
+                    renderStatus({
+                        state: 'access_denied',
+                        message: 'Cannot connect to server. Please check network.',
+                        door_locked: true
+                    });
+                    
+                    // Try to reconnect after a longer delay
+                    reconnectTimeout = setTimeout(() => {
+                        console.log('Attempting to reconnect...');
+                        connectionAttempts = 0;
+                        socket.connect();
+                    }, 10000);
+                }
+            });
 
-@app.route('/video_feed')
-def video_feed():
-    """MJPEG stream for monitoring"""
-    return Response(service.mjpeg_frame_generator(),
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+            socket.on('reconnect', (attemptNumber) => {
+                console.log('✓ Reconnected after', attemptNumber, 'attempts');
+                updateConnectionStatus('online', 'Connected');
+                
+                // Request status update after reconnection
+                socket.emit('request_status');
+            });
 
-@app.route('/api/status')
-def status():
-    """System status endpoint"""
-    return jsonify({
-        "status": "running",
-        "camera": "active" if service.camera else "inactive",
-        "recognizer": "ready" if service.recognizer else "not_ready",
-        "door_state": service.local_door_state
-    })
+            socket.on('reconnect_attempt', (attemptNumber) => {
+                console.log('Reconnection attempt:', attemptNumber);
+                updateConnectionStatus('connecting', `Reconnecting (${attemptNumber}/${maxConnectionAttempts})...`);
+            });
 
-@app.route("/api/door/control", methods=["POST"])
-def door_control():
-    """Remote door control endpoint"""
-    data = request.json
-    encrypted = data.get("data")
+            socket.on('reconnect_failed', () => {
+                console.log('Reconnection failed');
+                updateConnectionStatus('offline', 'Connection Lost');
+                
+                renderStatus({
+                    state: 'access_denied',
+                    message: 'Connection lost. Refresh page to retry.',
+                    door_locked: true
+                });
+            });
 
-    if not encrypted:
-        return jsonify({"error": "missing payload"}), 400
+            socket.on('ping', () => {
+                console.log('Ping received from server');
+            });
 
-    payload = decrypt_request(encrypted)
-    
-    if not payload:
-        return jsonify({"error": "invalid or expired request"}), 403
+            socket.on('pong', (latency) => {
+                console.log('Pong received, latency:', latency, 'ms');
+            });
 
-    action = payload["action"]
+            return socket;
+        }
 
-    if action == "unlock":
-        service.local_door_state = "unlocked"
-        service.relay.open()
-        service._emit_status("unlocked", "Door Unlocked Remotely", door_locked=False)
-        threading.Timer(2, lambda: service._emit_status("idle", "Monitoring", 
-                       door_locked=False)).start()
-        return jsonify({"status": "unlocked"})
+        // Initialize socket
+        const socket = initializeSocket();
 
-    if action == "lock":
-        service.local_door_state = "locked"
-        service.relay.close()
-        service._emit_status("locked", "Door Locked Remotely", door_locked=True)
-        threading.Timer(2, lambda: service._emit_status("idle", "Monitoring", 
-                       door_locked=True)).start()
-        return jsonify({"status": "locked"})
+        // Update clock
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
 
-    return jsonify({"error": "invalid action"}), 400
+        // Call owner function
+        function callOwner() {
+            if (!isConnected) {
+                alert('Not connected to server. Please wait for connection.');
+                return;
+            }
+            
+            const button = document.getElementById('callButton');
+            button.disabled = true;
+            socket.emit('call_owner');
+            setTimeout(() => {
+                button.disabled = false;
+            }, 5000);
+        }
 
-@app.route("/api/call", methods=["POST"])
-def trigger_call():
-    """API endpoint to trigger call"""
-    service.initiate_call_to_owner()
-    return jsonify({"status": "call_initiated"})
+        // Update background
+        function updateBackground(state) {
+            document.querySelectorAll('.bg-gradient').forEach(el => {
+                el.classList.remove('active');
+            });
+            const bgElement = document.getElementById(`bg-${state.replace('_', '-')}`);
+            if (bgElement) {
+                bgElement.classList.add('active');
+            }
+        }
 
+        // Render status based on state
+        function renderStatus(data) {
+            const container = document.getElementById('statusContainer');
+            const state = data.state;
+            currentState = state;
 
-# SocketIO event handlers
-@socketio.on('connect')
-def handle_connect():
-    """Handle client connection"""
-    print('[INFO] Client connected')
-    emit('status_update', {
-        'state': service.system_status,
-        'message': 'Connected to doorbell',
-        'door_locked': service.local_door_state == "locked",
-        'timestamp': datetime.now().strftime("%H:%M:%S")
-    })
+            updateBackground(state);
 
-@socketio.on('request_status')
-def handle_request_status():
-    """Send current status to client"""
-    emit('status_update', {
-        'state': service.system_status,
-        'message': 'System Ready',
-        'door_locked': service.local_door_state == "locked",
-        'timestamp': datetime.now().strftime("%H:%M:%S")
-    })
+            let html = '';
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    """Handle client disconnection"""
-    print('[INFO] Client disconnected')
+            switch(state) {
+                case 'idle':
+                case 'ready':
+                    const lockColor = data.door_locked ? '#f44336' : '#4caf50';
+                    html = `
+                        <div class="lock-icon" style="color: ${lockColor}">
+                            <div class="lock-shackle"></div>
+                            <div class="lock-body"></div>
+                        </div>
+                        <div class="status-message">
+                            ${data.door_locked ? 'Door Locked' : 'Door Unlocked'}
+                        </div>
+                        <div class="status-subtitle">${data.message}</div>
+                    `;
+                    break;
 
-@socketio.on('call_owner')
-def handle_call_owner():
-    """Handle call button press from UI"""
-    service.initiate_call_to_owner()
+                case 'detecting':
+                    html = `
+                        <div class="status-icon pulse">🔍</div>
+                        <div class="status-message">Face Detected</div>
+                        <div class="status-subtitle">${data.message}</div>
+                    `;
+                    break;
 
+                case 'access_granted':
+                    html = `
+                        <div class="status-icon">✅</div>
+                        <div class="status-message state-access-granted">Access Granted</div>
+                        <div class="status-subtitle">Welcome ${data.person_name || 'User'}!</div>
+                    `;
+                    break;
 
-# Main entry point
-if __name__ == "__main__":
-    print("[INFO] Starting Smart Doorbell System")
-    print("[INFO] Web UI available at http://localhost:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+                case 'access_denied':
+                    html = `
+                        <div class="status-icon">❌</div>
+                        <div class="status-message state-access-denied">Access Denied</div>
+                        <div class="status-subtitle">${data.message}</div>
+                    `;
+                    break;
+
+                case 'calling':
+                    html = `
+                        <div class="status-icon pulse">📞</div>
+                        <div class="status-message">Calling Owner</div>
+                        <div class="status-subtitle">Please wait...</div>
+                    `;
+                    break;
+
+                case 'loading':
+                    html = `
+                        <div class="spinner"></div>
+                        <div class="status-message">Loading</div>
+                        <div class="status-subtitle">${data.message}</div>
+                    `;
+                    break;
+
+                default:
+                    html = `
+                        <div class="status-message">${data.message}</div>
+                    `;
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Handle livestream errors
+        function handleStreamError() {
+            const streamImg = document.getElementById('livestream');
+            
+            streamImg.onerror = function() {
+                console.log('Stream error, reloading...');
+                // Try to reload the stream with cache busting
+                streamImg.src = '/video_feed?_=' + new Date().getTime();
+            };
+            
+            streamImg.onload = function() {
+                console.log('Stream loaded successfully');
+            };
+        }
+
+        // Initialize stream error handling
+        handleStreamError();
+
+        // Add manual reconnect button (optional, can be added to UI)
+        function manualReconnect() {
+            console.log('Manual reconnect requested');
+            updateConnectionStatus('connecting', 'Reconnecting...');
+            
+            renderStatus({
+                state: 'loading',
+                message: 'Attempting to reconnect...',
+                door_locked: true
+            });
+            
+            // Force reconnection
+            socket.disconnect();
+            socket.connect();
+        }
+
+        // Add to window for debugging
+        window.manualReconnect = manualReconnect;
+        window.socket = socket;
+
+        // Initial render
+        renderStatus({
+            state: 'loading',
+            message: 'Connecting to system...',
+            door_locked: true
+        });
+    </script>
+</body>
+</html>

@@ -22,13 +22,13 @@ app.config['SECRET_KEY'] = 'smart-doorbell-secret'
 
 CORS(app)
 
-socketio = SocketIO(
-    app,
-    cors_allowed_origins="*",
-    async_mode="eventlet",
-    ping_timeout=10,
-    ping_interval=5
-)
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*",
+                   ping_timeout=30,  # Increased ping timeout
+                   ping_interval=10,  # Send pings every 10 seconds
+                   async_mode='threading',
+                   logger=True,  # Enable logging for debugging
+                   engineio_logger=True)  # Enable engine.io logging
 
 class DeviceServiceLocal:
     def __init__(self, device_id, base_url):
@@ -244,7 +244,20 @@ def on_disconnect():
 def on_call_owner():
     service.initiate_call()
 
+# Add a thread to send periodic keep-alive messages
+def keep_alive_thread():
+    """Send periodic keep-alive messages to all clients"""
+    while True:
+        time.sleep(15)  # Send every 15 seconds
+        socketio.emit('keep_alive', {'timestamp': datetime.now().isoformat()})
+
+# Start the keep-alive thread when app starts
 if __name__ == "__main__":
-    print("[INFO] Smart Doorbell running")
-    print("[INFO] UI: http://0.0.0.0:5000")
-    socketio.run(app, host="0.0.0.0", port=5000)
+    print("[INFO] Starting Smart Doorbell System")
+    print("[INFO] Web UI available at http://localhost:5000")
+    
+    # Start keep-alive thread
+    keep_alive = Thread(target=keep_alive_thread, daemon=True)
+    keep_alive.start()
+    
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
