@@ -305,6 +305,8 @@ def index():
 @app.route('/video_feed')
 def video_feed():
     """MJPEG stream for monitoring"""
+    if service is None:
+        return Response("Service not ready", status=503)
     return Response(service.mjpeg_frame_generator(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
