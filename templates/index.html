@@ -390,11 +390,9 @@
 
         // UI Show/Hide functions
         function hideUI() {
-            const header = document.getElementById('header');
             const bottomBar = document.getElementById('bottomBar');
             const showUIButton = document.getElementById('showUIButton');
             
-            header.classList.add('hidden');
             bottomBar.classList.add('hidden');
             showUIButton.style.display = 'flex';
             uiHidden = true;
@@ -407,11 +405,9 @@
         }
 
         function showUI() {
-            const header = document.getElementById('header');
             const bottomBar = document.getElementById('bottomBar');
             const showUIButton = document.getElementById('showUIButton');
             
-            header.classList.remove('hidden');
             bottomBar.classList.remove('hidden');
             showUIButton.style.display = 'none';
             uiHidden = false;
