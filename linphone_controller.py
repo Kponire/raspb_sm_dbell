@@ -5,12 +5,13 @@ import os
 import signal
 
 class LinphoneController:
-    def __init__(self, sip_target, soundcard_id=5):
+    def __init__(self, sip_target, soundcard_id=5, on_call_end=None):
         self.sip_target = sip_target
         self.soundcard_id = soundcard_id
         self.process = None
         self.lock = threading.Lock()
         self.running = False
+        self.on_call_end = on_call_end
 
     def start(self):
         if self.running:
@@ -42,6 +43,14 @@ class LinphoneController:
     def _read_output(self):
         for line in self.process.stdout:
             print("[LINPHONE]", line.strip())
+
+            if "Call" in line and "ended" in line:
+                if self.on_call_end:
+                    self.on_call_end()
+
+            if "error" in line.lower() or "failed" in line.lower():
+                if self.on_call_end:
+                    self.on_call_end()
 
     def _send(self, command):
         with self.lock:

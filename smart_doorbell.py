@@ -70,7 +70,8 @@ class DeviceServiceLocal:
         print("[INFO] Initializing Linphone...")
         self.linphone = LinphoneController(
             sip_target="6001@10.30.132.143",
-            soundcard_id=5  # ALSA bcm2835 Headphones
+            soundcard_id=5,  # ALSA bcm2835 Headphones
+            on_call_end=self.on_call_ended
         )
         self.linphone.start()
 
@@ -245,6 +246,18 @@ class DeviceServiceLocal:
         time.sleep(3)
         self.system_status = "idle"
         self._emit_status("idle", "Monitoring for faces", door_locked=True)
+    
+    def on_call_ended(self):
+        print("[INFO] Call ended (remote or local)")
+        self.call_in_progress = False
+        self.system_status = "idle"
+
+        self._emit_status(
+            "idle",
+            "Call ended",
+            door_locked=(self.local_door_state == "locked")
+        )
+
 
     def initiate_call_to_owner(self):
         """Initiate SIP call using linphonec"""
@@ -348,6 +361,7 @@ def door_control():
     if action == "unlock":
         service.local_door_state = "unlocked"
         service.relay.open()
+        service.buzzer.beep(300)
         service._emit_status("unlocked", "Door Unlocked Remotely", door_locked=False)
         threading.Timer(2, lambda: service._emit_status("idle", "Monitoring", 
                        door_locked=False)).start()
