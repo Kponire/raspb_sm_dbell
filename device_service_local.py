@@ -27,11 +27,11 @@ class DeviceServiceLocal:
         self.face_detector = self.recognizer.face_detector
 
         # Hardware
-        self.relay = Relay(4)
-        self.buzzer = Buzzer(27)
-        self.yellow_indicator = YellowIndicator(13)
-        self.red_indicator = RedIndicator(21)
-        self.button = Button(7)
+        self.relay = Relay(21)
+        self.buzzer = Buzzer(13)
+        self.yellow_indicator = YellowIndicator(20)
+        self.red_indicator = RedIndicator(26)
+        self.button = Button(5)
         self.lcd = LCD()
 
         # State

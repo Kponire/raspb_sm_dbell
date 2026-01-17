@@ -42,9 +42,9 @@ class DeviceServiceLocal:
         self.face_detector = self.recognizer.face_detector
 
         print("[INFO] Initializing Hardware...")
-        self.relay = Relay(4)
-        self.buzzer = Buzzer(27)
-        self.button = Button(7)
+        self.relay = Relay(21)
+        self.buzzer = Buzzer(13)
+        self.button = Button(5)
 
         # State
         self.processing = False
