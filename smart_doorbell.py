@@ -7,7 +7,7 @@ from flask_socketio import SocketIO, emit
 from camera import Camera
 from security import decrypt_request
 from recognizer import Recognizer
-from hardware import Relay, Buzzer
+from hardware import Button, Relay, Buzzer
 from api_client import api_client
 import os
 from datetime import datetime
@@ -44,10 +44,13 @@ class DeviceServiceLocal:
         print("[INFO] Initializing Hardware...")
         self.relay = Relay(4)
         self.buzzer = Buzzer(27)
+        self.button = Button(7)
 
         # State
         self.processing = False
         self.call_in_progress = False
+        self.last_button_press = 0
+        self.button_debounce_time = 2
         self.local_door_state = "locked"
         self.last_recognition_time = 0
         self.recognition_cooldown = 3
@@ -170,6 +173,9 @@ class DeviceServiceLocal:
                         self.system_status = "idle"
                         self._emit_status("idle", "Monitoring for faces", 
                                         door_locked=(self.local_door_state == "locked"))
+                if self.button.is_pressed():
+                    self.initiate_call_to_owner()
+                    time.sleep(0.5)
 
                 time.sleep(0.05)
 
@@ -242,6 +248,9 @@ class DeviceServiceLocal:
 
     def initiate_call_to_owner(self):
         """Initiate SIP call using linphonec"""
+        current_time = time.time()
+        if current_time - self.last_button_press < self.button_debounce_time:
+            return 
         if self.call_in_progress:
             return
 
