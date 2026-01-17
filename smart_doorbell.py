@@ -24,8 +24,8 @@ socketio = SocketIO(app,
                    ping_timeout=30,  # Increased ping timeout
                    ping_interval=10,  # Send pings every 10 seconds
                    async_mode='threading',
-                   logger=True,  # Enable logging for debugging
-                   engineio_logger=True)  # Enable engine.io logging
+                   logger=False,  # Enable logging for debugging
+                   engineio_logger=False)  # Enable engine.io logging
 
 class DeviceServiceLocal:
     """Smart Doorbell Device Service with web-based UI"""

@@ -1,329 +1,369 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, user-scalable=no"
+    />
     <title>Smart Doorbell</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      body {
+        /*font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;*/
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        color: white;
+        overflow: hidden;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* Header */
+      .header {
+        background: #c2255c;
+        padding: 10px 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: relative;
+        z-index: 10;
+      }
+
+      .header h1 {
+        font-size: 20px;
+        font-weight: 600;
+      }
+
+      .time {
+        font-size: 16px;
+        font-weight: 300;
+      }
+
+      /* Connection Status Indicator */
+      .connection-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        padding: 5px 10px;
+        border-radius: 15px;
+        margin-left: 15px;
+      }
+
+      .connection-status.online {
+        background: rgba(76, 175, 80, 0.2);
+        color: #4caf50;
+      }
+
+      .connection-status.offline {
+        background: rgba(244, 67, 54, 0.2);
+        color: #f44336;
+      }
+
+      .connection-status.connecting {
+        background: rgba(255, 193, 7, 0.2);
+        color: #ffc107;
+      }
+
+      .connection-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+
+      .connection-dot.online {
+        background: #4caf50;
+        box-shadow: 0 0 10px #4caf50;
+      }
+
+      .connection-dot.offline {
+        background: #f44336;
+        box-shadow: 0 0 10px #f44336;
+      }
+
+      .connection-dot.connecting {
+        background: #ffc107;
+        box-shadow: 0 0 10px #ffc107;
+        animation: pulse 1.5s infinite;
+      }
+
+      /* Main Content */
+      .content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: flex-start;
+        padding: 20px;
+        position: relative;
+        z-index: 5;
+      }
+
+      /* Livestream Container */
+      .livestream-container {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 220px;
+        height: 165px;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        border: 3px solid #c2255c;
+        z-index: 100;
+        background: #000;
+        z-index: 15;
+      }
+
+      .livestream-container img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .livestream-label {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(194, 37, 92, 0.8);
+        color: white;
+        padding: 6px;
+        font-size: 13px;
+        text-align: center;
+        font-weight: bold;
+      }
+
+      /* Status Display */
+      .status-container {
+        text-align: center; /* center */
+        z-index: 10;
+        padding: 20px;
+      }
+
+      .status-icon {
+        font-size: 20px; /* 80px */
+        margin-bottom: 20px;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .status-message {
+        font-size: 22px;
+        font-weight: 600;
+        margin-bottom: 10px;
+        animation: fadeIn 0.3s ease;
+      }
+
+      .status-subtitle {
+        font-size: 16px;
+        color: #aaa;
+        animation: fadeIn 0.3s ease;
+      }
+
+      /* Lock Icon */
+      .lock-icon {
+        width: 60px;
+        height: 50px;
+        margin: 0 auto 20px;
+        position: relative;
+      }
+
+      .lock-body {
+        width: 40px;
+        height: 30px;
+        background: currentColor;
+        border-radius: 8px;
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      .lock-shackle {
+        width: 20px;
+        height: 20px;
+        border: 8px solid currentColor;
+        border-bottom: none;
+        border-radius: 40px 40px 0 0;
+        position: absolute;
+        top: 0;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+
+      /* Colors for different states */
+      .state-idle {
+        color: #f44336;
+      }
+      .state-detecting {
+        color: #ffc107;
+      }
+      .state-access-granted {
+        color: #4caf50;
+      }
+      .state-access-denied {
+        color: #f44336;
+      }
+      .state-calling {
+        color: #2196f3;
+      }
+      .state-loading {
+        color: #2196f3;
+      }
+
+      /* Background effects */
+      .bg-gradient {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        opacity: 0;
+        transition: opacity 0.5s ease;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .bg-gradient.active {
+        opacity: 1;
+      }
+
+      .bg-idle {
+        background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+      }
+      .bg-detecting {
+        background: linear-gradient(135deg, #ff6f00 0%, #ffa726 100%);
+      }
+      .bg-access-granted {
+        background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%);
+      }
+      .bg-access-denied {
+        background: linear-gradient(135deg, #c62828 0%, #ef5350 100%);
+      }
+      .bg-calling {
+        background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%);
+      }
+
+      /* Bottom Bar */
+      .bottom-bar {
+        background: #2d2d2d;
+        padding: 15px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+        position: relative;
+        z-index: 10;
+      }
+
+      .status-indicators {
+        display: flex;
+        gap: 15px;
+        font-size: 14px;
+      }
+
+      .indicator {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .indicator-dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #4caf50;
+        box-shadow: 0 0 10px #4caf50;
+      }
+
+      /* Call Button */
+      .call-button {
+        background: #c2255c;
+        color: white;
+        border: none;
+        padding: 15px 30px;
+        font-size: 16px;
+        font-weight: 600;
+        border-radius: 12px;
+        cursor: pointer;
+        box-shadow: 0 1px 5px #c2255c;
+        transition: all 0.3s ease;
+        touch-action: manipulation;
+      }
+
+      .call-button:active {
+        transform: scale(0.95);
+        box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
+      }
+
+      .call-button:disabled {
+        background: #666;
+        box-shadow: none;
+        cursor: not-allowed;
+      }
+
+      /* Animations */
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(20px);
         }
-
-        body {
-            /*font-family: "Noto Color Emoji", "Segoe UI Emoji", "Apple Color Emoji", system-ui, sans-serif;*/
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-            color: white;
-            overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+        to {
+          opacity: 1;
+          transform: translateY(0);
         }
+      }
 
-        /* Header */
-        .header {
-            background: #c2255c;
-            padding: 10px 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: relative;
-            z-index: 10;
+      @keyframes pulse {
+        0%,
+        100% {
+          transform: scale(1);
         }
-
-        .header h1 {
-            font-size: 20px;
-            font-weight: 600;
+        50% {
+          transform: scale(1.1);
         }
+      }
 
-        .time {
-            font-size: 16px;
-            font-weight: 300;
+      @keyframes spin {
+        from {
+          transform: rotate(0deg);
         }
-
-        /* Connection Status Indicator */
-        .connection-status {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            padding: 5px 10px;
-            border-radius: 15px;
-            margin-left: 15px;
+        to {
+          transform: rotate(360deg);
         }
+      }
 
-        .connection-status.online {
-            background: rgba(76, 175, 80, 0.2);
-            color: #4caf50;
-        }
+      .pulse {
+        animation: pulse 2s ease-in-out infinite;
+      }
 
-        .connection-status.offline {
-            background: rgba(244, 67, 54, 0.2);
-            color: #f44336;
-        }
+      .spin {
+        animation: spin 2s linear infinite;
+      }
 
-        .connection-status.connecting {
-            background: rgba(255, 193, 7, 0.2);
-            color: #ffc107;
-        }
-
-        .connection-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-        }
-
-        .connection-dot.online {
-            background: #4caf50;
-            box-shadow: 0 0 10px #4caf50;
-        }
-
-        .connection-dot.offline {
-            background: #f44336;
-            box-shadow: 0 0 10px #f44336;
-        }
-
-        .connection-dot.connecting {
-            background: #ffc107;
-            box-shadow: 0 0 10px #ffc107;
-            animation: pulse 1.5s infinite;
-        }
-
-        /* Main Content */
-        .content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: flex-start;
-            align-items: flex-start;
-            padding: 20px;
-            position: relative;
-            z-index: 5;
-        }
-
-        /* Livestream Container */
-        .livestream-container {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 220px;
-            height: 165px;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-            border: 3px solid #c2255c;
-            z-index: 100;
-            background: #000;
-            z-index: 15;
-        }
-
-        .livestream-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .livestream-label {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(194, 37, 92, 0.8);
-            color: white;
-            padding: 6px;
-            font-size: 13px;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        /* Status Display */
-        .status-container {
-            text-align: center; /* center */
-            z-index: 10;
-            padding: 20px;
-        }
-
-        .status-icon {
-            font-size: 20px; /* 80px */
-            margin-bottom: 20px;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .status-message {
-            font-size: 22px;
-            font-weight: 600;
-            margin-bottom: 10px;
-            animation: fadeIn 0.3s ease;
-        }
-
-        .status-subtitle {
-            font-size: 16px;
-            color: #aaa;
-            animation: fadeIn 0.3s ease;
-        }
-
-        /* Lock Icon */
-        .lock-icon {
-            width: 60px;
-            height: 50px;
-            margin: 0 auto 20px;
-            position: relative;
-        }
-
-        .lock-body {
-            width: 40px;
-            height: 30px;
-            background: currentColor;
-            border-radius: 8px;
-            position: absolute;
-            bottom: 0;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        .lock-shackle {
-            width: 20px;
-            height: 20px;
-            border: 8px solid currentColor;
-            border-bottom: none;
-            border-radius: 40px 40px 0 0;
-            position: absolute;
-            top: 0;
-            left: 50%;
-            transform: translateX(-50%);
-        }
-
-        /* Colors for different states */
-        .state-idle { color: #f44336; }
-        .state-detecting { color: #ffc107; }
-        .state-access-granted { color: #4caf50; }
-        .state-access-denied { color: #f44336; }
-        .state-calling { color: #2196f3; }
-        .state-loading { color: #2196f3; }
-
-        /* Background effects */
-        .bg-gradient {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            opacity: 0;
-            transition: opacity 0.5s ease;
-            pointer-events: none;
-            z-index: 0;
-        }
-
-        .bg-gradient.active {
-            opacity: 1;
-        }
-
-        .bg-idle { background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%); }
-        .bg-detecting { background: linear-gradient(135deg, #ff6f00 0%, #ffa726 100%); }
-        .bg-access-granted { background: linear-gradient(135deg, #2e7d32 0%, #66bb6a 100%); }
-        .bg-access-denied { background: linear-gradient(135deg, #c62828 0%, #ef5350 100%); }
-        .bg-calling { background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%); }
-
-        /* Bottom Bar */
-        .bottom-bar {
-            background: #2d2d2d;
-            padding: 15px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
-            position: relative;
-            z-index: 10;
-        }
-
-        .status-indicators {
-            display: flex;
-            gap: 15px;
-            font-size: 14px;
-        }
-
-        .indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .indicator-dot {
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: #4caf50;
-            box-shadow: 0 0 10px #4caf50;
-        }
-
-        /* Call Button */
-        .call-button {
-            background: #2196f3;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 16px;
-            font-weight: 600;
-            border-radius: 12px;
-            cursor: pointer;
-            box-shadow: 0 4px 15px rgba(33, 150, 243, 0.4);
-            transition: all 0.3s ease;
-            touch-action: manipulation;
-        }
-
-        .call-button:active {
-            transform: scale(0.95);
-            box-shadow: 0 2px 8px rgba(33, 150, 243, 0.4);
-        }
-
-        .call-button:disabled {
-            background: #666;
-            box-shadow: none;
-            cursor: not-allowed;
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        .pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .spin {
-            animation: spin 2s linear infinite;
-        }
-
-        /* Loading spinner */
-        .spinner {
-            width: 30px;
-            height: 30px;
-            border: 8px solid rgba(255,255,255,0.1);
-            border-top-color: #2196f3;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
+      /* Loading spinner */
+      .spinner {
+        width: 30px;
+        height: 30px;
+        border: 8px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #2196f3;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <!-- Background Gradients -->
     <div class="bg-gradient bg-idle active" id="bg-idle"></div>
     <div class="bg-gradient bg-detecting" id="bg-detecting"></div>
@@ -333,364 +373,373 @@
 
     <!-- Header -->
     <div class="header" id="header">
-        <h1>Smart Doorbell</h1>
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <div class="connection-status connecting" id="connectionStatus">
-                <div class="connection-dot connecting"></div>
-                <span id="connectionText">Connecting...</span>
-            </div>
-            <div class="time" id="time">--:--</div>
+      <h1>Smart Doorbell</h1>
+      <div style="display: flex; align-items: center; gap: 15px">
+        <div class="connection-status connecting" id="connectionStatus">
+          <div class="connection-dot connecting"></div>
+          <span id="connectionText">Connecting...</span>
         </div>
+        <div class="time" id="time">--:--</div>
+      </div>
     </div>
 
     <!-- Main Content -->
     <div class="content">
-        <!-- Livestream Container -->
-        <div class="livestream-container" id="livestreamContainer">
-            <img id="livestream" src="/video_feed" alt="Live Stream">
-            <div class="livestream-label">VISITOR VIEW</div>
-        </div>
+      <!-- Livestream Container -->
+      <div class="livestream-container" id="livestreamContainer">
+        <img id="livestream" src="/video_feed" alt="Live Stream" />
+        <div class="livestream-label">VISITOR VIEW</div>
+      </div>
 
-        <!-- Status Display -->
-        <div class="status-container" id="statusContainer">
-            <!-- Dynamic content will be injected here -->
-        </div>
+      <!-- Status Display -->
+      <div class="status-container" id="statusContainer">
+        <!-- Dynamic content will be injected here -->
+      </div>
     </div>
 
     <!-- Bottom Bar -->
     <div class="bottom-bar" id="bottomBar">
-        <div class="status-indicators">
-            <div class="indicator">
-                <div class="indicator-dot"></div>
-                <span>Camera Active</span>
-            </div>
-            <div class="indicator">
-                <div class="indicator-dot"></div>
-                <span>System Online</span>
-            </div>
+      <div class="status-indicators">
+        <div class="indicator">
+          <div class="indicator-dot"></div>
+          <span>Camera Active</span>
         </div>
-        <button class="call-button" id="callButton" onclick="callOwner()">
-            Call Owner
-        </button>
+        <div class="indicator">
+          <div class="indicator-dot"></div>
+          <span>System Online</span>
+        </div>
+      </div>
+      <button class="call-button" id="callButton" onclick="callOwner()">
+        Call Owner
+      </button>
     </div>
 
     <script>
-        // Connection state
-        let currentState = 'idle';
-        let isConnected = false;
-        let connectionAttempts = 0;
-        const maxConnectionAttempts = 10;
-        let reconnectTimeout = null;
+      // Connection state
+      let currentState = "idle";
+      let isConnected = false;
+      let connectionAttempts = 0;
+      const maxConnectionAttempts = 10;
+      let reconnectTimeout = null;
 
-        // Update connection status UI
-        function updateConnectionStatus(status, message) {
-            const statusElement = document.getElementById('connectionStatus');
-            const textElement = document.getElementById('connectionText');
-            const dotElement = statusElement.querySelector('.connection-dot');
-            
-            // Remove all classes
-            statusElement.className = 'connection-status';
-            dotElement.className = 'connection-dot';
-            
-            // Add appropriate classes
-            statusElement.classList.add(status);
-            dotElement.classList.add(status);
-            
-            textElement.textContent = message;
+      // Update connection status UI
+      function updateConnectionStatus(status, message) {
+        const statusElement = document.getElementById("connectionStatus");
+        const textElement = document.getElementById("connectionText");
+        const dotElement = statusElement.querySelector(".connection-dot");
+
+        // Remove all classes
+        statusElement.className = "connection-status";
+        dotElement.className = "connection-dot";
+
+        // Add appropriate classes
+        statusElement.classList.add(status);
+        dotElement.classList.add(status);
+
+        textElement.textContent = message;
+      }
+
+      // Initialize Socket.IO with optimized settings
+      function initializeSocket() {
+        console.log("Initializing WebSocket connection...");
+
+        // Clear any existing reconnection timeout
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
         }
 
-        // Initialize Socket.IO with optimized settings
-        function initializeSocket() {
-            console.log('Initializing WebSocket connection...');
-            
-            // Clear any existing reconnection timeout
-            if (reconnectTimeout) {
-                clearTimeout(reconnectTimeout);
-                reconnectTimeout = null;
-            }
-            
-            // Create socket with robust configuration
-            const socket = io({
-                reconnection: true,
-                reconnectionAttempts: maxConnectionAttempts,
-                reconnectionDelay: 1000,
-                reconnectionDelayMax: 5000,
-                timeout: 30000,  // Increased timeout to 30 seconds
-                pingTimeout: 20000,  // Increased ping timeout
-                pingInterval: 10000,  // Send pings every 10 seconds
-                transports: ['websocket', 'polling'],  // Try websocket first, then polling
-                forceNew: false,
-                autoConnect: true,
-                rememberUpgrade: true
+        // Create socket with robust configuration
+        const socket = io({
+          reconnection: true,
+          reconnectionAttempts: maxConnectionAttempts,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          timeout: 30000, // Increased timeout to 30 seconds
+          pingTimeout: 20000, // Increased ping timeout
+          pingInterval: 10000, // Send pings every 10 seconds
+          transports: ["websocket", "polling"], // Try websocket first, then polling
+          forceNew: false,
+          autoConnect: true,
+          rememberUpgrade: true,
+        });
+
+        // Socket.IO event handlers
+        socket.on("connect", () => {
+          console.log("✓ Connected to doorbell server");
+          isConnected = true;
+          connectionAttempts = 0;
+          updateConnectionStatus("online", "Connected");
+
+          // Request initial status
+          setTimeout(() => {
+            socket.emit("request_status");
+          }, 500);
+        });
+
+        socket.on("status_update", (data) => {
+          console.log("Status update:", data);
+          renderStatus(data);
+        });
+
+        socket.on("disconnect", (reason) => {
+          console.log("✗ Disconnected from doorbell:", reason);
+          isConnected = false;
+
+          if (reason === "io server disconnect") {
+            // Server disconnected us, try to reconnect
+            updateConnectionStatus("connecting", "Reconnecting...");
+            socket.connect();
+          } else if (reason === "io client disconnect") {
+            // Client disconnected intentionally
+            updateConnectionStatus("offline", "Disconnected");
+          } else {
+            // Unexpected disconnect (network issues, etc.)
+            updateConnectionStatus("connecting", "Reconnecting...");
+
+            // Show disconnected status
+            renderStatus({
+              state: "loading",
+              message: "Connection lost. Reconnecting...",
+              door_locked: true,
+            });
+          }
+        });
+
+        socket.on("connect_error", (error) => {
+          console.log("Connection error:", error);
+          isConnected = false;
+          connectionAttempts++;
+
+          if (connectionAttempts <= maxConnectionAttempts) {
+            updateConnectionStatus(
+              "connecting",
+              `Connecting (${connectionAttempts}/${maxConnectionAttempts})...`,
+            );
+
+            renderStatus({
+              state: "loading",
+              message: `Connection attempt ${connectionAttempts} of ${maxConnectionAttempts}...`,
+              door_locked: true,
+            });
+          } else {
+            updateConnectionStatus("offline", "Connection Failed");
+
+            renderStatus({
+              state: "access_denied",
+              message: "Cannot connect to server. Please check network.",
+              door_locked: true,
             });
 
-            // Socket.IO event handlers
-            socket.on('connect', () => {
-                console.log('✓ Connected to doorbell server');
-                isConnected = true;
-                connectionAttempts = 0;
-                updateConnectionStatus('online', 'Connected');
-                
-                // Request initial status
-                setTimeout(() => {
-                    socket.emit('request_status');
-                }, 500);
-            });
+            // Try to reconnect after a longer delay
+            reconnectTimeout = setTimeout(() => {
+              console.log("Attempting to reconnect...");
+              connectionAttempts = 0;
+              socket.connect();
+            }, 10000);
+          }
+        });
 
-            socket.on('status_update', (data) => {
-                console.log('Status update:', data);
-                renderStatus(data);
-            });
+        socket.on("reconnect", (attemptNumber) => {
+          console.log("✓ Reconnected after", attemptNumber, "attempts");
+          updateConnectionStatus("online", "Connected");
 
-            socket.on('disconnect', (reason) => {
-                console.log('✗ Disconnected from doorbell:', reason);
-                isConnected = false;
-                
-                if (reason === 'io server disconnect') {
-                    // Server disconnected us, try to reconnect
-                    updateConnectionStatus('connecting', 'Reconnecting...');
-                    socket.connect();
-                } else if (reason === 'io client disconnect') {
-                    // Client disconnected intentionally
-                    updateConnectionStatus('offline', 'Disconnected');
-                } else {
-                    // Unexpected disconnect (network issues, etc.)
-                    updateConnectionStatus('connecting', 'Reconnecting...');
-                    
-                    // Show disconnected status
-                    renderStatus({
-                        state: 'loading',
-                        message: 'Connection lost. Reconnecting...',
-                        door_locked: true
-                    });
-                }
-            });
+          // Request status update after reconnection
+          socket.emit("request_status");
+        });
 
-            socket.on('connect_error', (error) => {
-                console.log('Connection error:', error);
-                isConnected = false;
-                connectionAttempts++;
-                
-                if (connectionAttempts <= maxConnectionAttempts) {
-                    updateConnectionStatus('connecting', `Connecting (${connectionAttempts}/${maxConnectionAttempts})...`);
-                    
-                    renderStatus({
-                        state: 'loading',
-                        message: `Connection attempt ${connectionAttempts} of ${maxConnectionAttempts}...`,
-                        door_locked: true
-                    });
-                } else {
-                    updateConnectionStatus('offline', 'Connection Failed');
-                    
-                    renderStatus({
-                        state: 'access_denied',
-                        message: 'Cannot connect to server. Please check network.',
-                        door_locked: true
-                    });
-                    
-                    // Try to reconnect after a longer delay
-                    reconnectTimeout = setTimeout(() => {
-                        console.log('Attempting to reconnect...');
-                        connectionAttempts = 0;
-                        socket.connect();
-                    }, 10000);
-                }
-            });
+        socket.on("reconnect_attempt", (attemptNumber) => {
+          console.log("Reconnection attempt:", attemptNumber);
+          updateConnectionStatus(
+            "connecting",
+            `Reconnecting (${attemptNumber}/${maxConnectionAttempts})...`,
+          );
+        });
 
-            socket.on('reconnect', (attemptNumber) => {
-                console.log('✓ Reconnected after', attemptNumber, 'attempts');
-                updateConnectionStatus('online', 'Connected');
-                
-                // Request status update after reconnection
-                socket.emit('request_status');
-            });
+        socket.on("reconnect_failed", () => {
+          console.log("Reconnection failed");
+          updateConnectionStatus("offline", "Connection Lost");
 
-            socket.on('reconnect_attempt', (attemptNumber) => {
-                console.log('Reconnection attempt:', attemptNumber);
-                updateConnectionStatus('connecting', `Reconnecting (${attemptNumber}/${maxConnectionAttempts})...`);
-            });
+          renderStatus({
+            state: "access_denied",
+            message: "Connection lost. Refresh page to retry.",
+            door_locked: true,
+          });
+        });
 
-            socket.on('reconnect_failed', () => {
-                console.log('Reconnection failed');
-                updateConnectionStatus('offline', 'Connection Lost');
-                
-                renderStatus({
-                    state: 'access_denied',
-                    message: 'Connection lost. Refresh page to retry.',
-                    door_locked: true
-                });
-            });
+        socket.on("ping", () => {
+          console.log("Ping received from server");
+        });
 
-            socket.on('ping', () => {
-                console.log('Ping received from server');
-            });
+        socket.on("pong", (latency) => {
+          console.log("Pong received, latency:", latency, "ms");
+        });
 
-            socket.on('pong', (latency) => {
-                console.log('Pong received, latency:', latency, 'ms');
-            });
+        return socket;
+      }
 
-            return socket;
+      // Initialize socket
+      const socket = initializeSocket();
+
+      // Update clock
+      function updateClock() {
+        const now = new Date();
+        const hours = String(now.getHours()).padStart(2, "0");
+        const minutes = String(now.getMinutes()).padStart(2, "0");
+        const seconds = String(now.getSeconds()).padStart(2, "0");
+        document.getElementById("time").textContent =
+          `${hours}:${minutes}:${seconds}`;
+      }
+      setInterval(updateClock, 1000);
+      updateClock();
+
+      // Call owner function
+      function callOwner() {
+        if (!isConnected) {
+          alert("Not connected to server. Please wait for connection.");
+          return;
         }
 
-        // Initialize socket
-        const socket = initializeSocket();
+        const button = document.getElementById("callButton");
+        button.disabled = true;
+        socket.emit("call_owner");
+        setTimeout(() => {
+          button.disabled = false;
+        }, 5000);
+      }
 
-        // Update clock
-        function updateClock() {
-            const now = new Date();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-            document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+      // Update background
+      function updateBackground(state) {
+        document.querySelectorAll(".bg-gradient").forEach((el) => {
+          el.classList.remove("active");
+        });
+        const bgElement = document.getElementById(
+          `bg-${state.replace("_", "-")}`,
+        );
+        if (bgElement) {
+          bgElement.classList.add("active");
         }
-        setInterval(updateClock, 1000);
-        updateClock();
+      }
 
-        // Call owner function
-        function callOwner() {
-            if (!isConnected) {
-                alert('Not connected to server. Please wait for connection.');
-                return;
-            }
-            
-            const button = document.getElementById('callButton');
-            button.disabled = true;
-            socket.emit('call_owner');
-            setTimeout(() => {
-                button.disabled = false;
-            }, 5000);
-        }
+      // Render status based on state
+      function renderStatus(data) {
+        const container = document.getElementById("statusContainer");
+        const state = data.state;
+        currentState = state;
 
-        // Update background
-        function updateBackground(state) {
-            document.querySelectorAll('.bg-gradient').forEach(el => {
-                el.classList.remove('active');
-            });
-            const bgElement = document.getElementById(`bg-${state.replace('_', '-')}`);
-            if (bgElement) {
-                bgElement.classList.add('active');
-            }
-        }
+        updateBackground(state);
 
-        // Render status based on state
-        function renderStatus(data) {
-            const container = document.getElementById('statusContainer');
-            const state = data.state;
-            currentState = state;
+        let html = "";
 
-            updateBackground(state);
-
-            let html = '';
-
-            switch(state) {
-                case 'idle':
-                case 'ready':
-                    const lockColor = data.door_locked ? '#f44336' : '#4caf50';
-                    html = `
+        switch (state) {
+          case "idle":
+          case "ready":
+            const lockColor = data.door_locked ? "#f44336" : "#4caf50";
+            html = `
                         <div class="lock-icon" style="color: ${lockColor}">
                             <div class="lock-shackle"></div>
                             <div class="lock-body"></div>
                         </div>
                         <div class="status-message">
-                            ${data.door_locked ? 'Door Locked' : 'Door Unlocked'}
+                            ${data.door_locked ? "Door Locked" : "Door Unlocked"}
                         </div>
                         <div class="status-subtitle">${data.message}</div>
                     `;
-                    break;
+            break;
 
-                case 'detecting':
-                    html = `
+          case "detecting":
+            html = `
                         <div class="status-icon pulse">🔍</div>
                         <div class="status-message">Face Detected</div>
                         <div class="status-subtitle">${data.message}</div>
                     `;
-                    break;
+            break;
 
-                case 'access_granted':
-                    html = `
+          case "access_granted":
+            html = `
                         <div class="status-icon">✅</div>
                         <div class="status-message state-access-granted">Access Granted</div>
-                        <div class="status-subtitle">Welcome ${data.person_name || 'User'}!</div>
+                        <div class="status-subtitle">Welcome ${data.person_name || "User"}!</div>
                     `;
-                    break;
+            break;
 
-                case 'access_denied':
-                    html = `
+          case "access_denied":
+            html = `
                         <div class="status-icon">❌</div>
                         <div class="status-message state-access-denied">Access Denied</div>
                         <div class="status-subtitle">${data.message}</div>
                     `;
-                    break;
+            break;
 
-                case 'calling':
-                    html = `
+          case "calling":
+            html = `
                         <div class="status-icon pulse">📞</div>
                         <div class="status-message">Calling Owner</div>
                         <div class="status-subtitle">Please wait...</div>
                     `;
-                    break;
+            break;
 
-                case 'loading':
-                    html = `
+          case "loading":
+            html = `
                         <div class="spinner"></div>
                         <div class="status-message">Loading</div>
                         <div class="status-subtitle">${data.message}</div>
                     `;
-                    break;
+            break;
 
-                default:
-                    html = `
+          default:
+            html = `
                         <div class="status-message">${data.message}</div>
                     `;
-            }
-
-            container.innerHTML = html;
         }
 
-        // Handle livestream errors
-        function handleStreamError() {
-            const streamImg = document.getElementById('livestream');
-            
-            streamImg.onerror = function() {
-                console.log('Stream error, reloading...');
-                // Try to reload the stream with cache busting
-                streamImg.src = '/video_feed?_=' + new Date().getTime();
-            };
-            
-            streamImg.onload = function() {
-                console.log('Stream loaded successfully');
-            };
-        }
+        container.innerHTML = html;
+      }
 
-        // Initialize stream error handling
-        handleStreamError();
+      // Handle livestream errors
+      function handleStreamError() {
+        const streamImg = document.getElementById("livestream");
 
-        // Add manual reconnect button (optional, can be added to UI)
-        function manualReconnect() {
-            console.log('Manual reconnect requested');
-            updateConnectionStatus('connecting', 'Reconnecting...');
-            
-            renderStatus({
-                state: 'loading',
-                message: 'Attempting to reconnect...',
-                door_locked: true
-            });
-            
-            // Force reconnection
-            socket.disconnect();
-            socket.connect();
-        }
+        streamImg.onerror = function () {
+          console.log("Stream error, reloading...");
+          // Try to reload the stream with cache busting
+          streamImg.src = "/video_feed?_=" + new Date().getTime();
+        };
 
-        // Add to window for debugging
-        window.manualReconnect = manualReconnect;
-        window.socket = socket;
+        streamImg.onload = function () {
+          console.log("Stream loaded successfully");
+        };
+      }
 
-        // Initial render
+      // Initialize stream error handling
+      handleStreamError();
+
+      // Add manual reconnect button (optional, can be added to UI)
+      function manualReconnect() {
+        console.log("Manual reconnect requested");
+        updateConnectionStatus("connecting", "Reconnecting...");
+
         renderStatus({
-            state: 'loading',
-            message: 'Connecting to system...',
-            door_locked: true
+          state: "loading",
+          message: "Attempting to reconnect...",
+          door_locked: true,
         });
+
+        // Force reconnection
+        socket.disconnect();
+        socket.connect();
+      }
+
+      // Add to window for debugging
+      window.manualReconnect = manualReconnect;
+      window.socket = socket;
+
+      // Initial render
+      renderStatus({
+        state: "loading",
+        message: "Connecting to system...",
+        door_locked: true,
+      });
     </script>
-</body>
+  </body>
 </html>
