@@ -434,7 +434,7 @@ if __name__ == "__main__":
     keep_alive = threading.Thread(target=keep_alive_thread, daemon=True)
     keep_alive.start()
     
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False, allow_unsafe_werkzeug=True)
 
 import atexit
 
