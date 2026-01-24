@@ -134,7 +134,6 @@ class Button:
 
     def is_pressed(self) -> bool:
         if REAL_GPIO:
-            print("Button is pressed")
             return GPIO.input(self.pin) == GPIO.HIGH
         return False
 
