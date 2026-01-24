@@ -242,6 +242,15 @@ class DeviceServiceLocal:
         
         self._emit_status("access_denied", "Unknown Person Detected", door_locked=True)
         self.buzzer.beep(300)
+        image_url = self.capture_and_upload(frame, "Unknown", "unrecognized")
+
+        if image_url and api_client:
+            api_client.send_notification(
+                status="unrecognized",
+                image_url=image_url,
+                confidence=None,
+                person_name="Unknown"
+            )
         
         time.sleep(3)
         self.system_status = "idle"
