@@ -33,6 +33,9 @@ class DeviceServiceLocal:
     def __init__(self, device_id, base_url):
         self.device_id = device_id if device_id else os.getenv("DEVICE_ID")
         self.base_url = base_url if base_url else os.getenv("BACKEND_URL")
+        print("[DEBUG] BACKEND_URL =", self.base_url)
+        print("[DEBUG] DEVICE_ID =", self.device_id)
+
 
         print("[INFO] Initializing Camera...")
         self.camera = Camera(resolution=(640, 480), framerate=15)
