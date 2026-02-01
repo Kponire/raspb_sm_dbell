@@ -12,7 +12,7 @@ from api_client import api_client
 import os
 from datetime import datetime
 from linphone_controller import LinphoneController
-from launch_browser import start_chromium
+from launch_browser import test_start_chromium
 
 # Flask app with SocketIO for real-time updates
 app = Flask(__name__)
@@ -441,7 +441,7 @@ if __name__ == "__main__":
     print("[INFO] Starting Smart Doorbell System")
     print("[INFO] Web UI available at http://localhost:5000")
     
-    start_chromium()
+    test_start_chromium()
     # Start keep-alive thread
     keep_alive = threading.Thread(target=keep_alive_thread, daemon=True)
     keep_alive.start()
