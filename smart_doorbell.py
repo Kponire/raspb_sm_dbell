@@ -334,7 +334,7 @@ threading.Thread(target=start_services, daemon=True).start()
 @app.route('/')
 def index():
     """Main UI page"""
-    return render_template('index.html')
+    return render_template('index_one.html')
 
 @app.route('/video_feed')
 def video_feed():
