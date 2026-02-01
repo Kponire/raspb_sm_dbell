@@ -28,7 +28,7 @@ def test_start_chromium():
     subprocess.run(["pkill", "-f", "chromium"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     chromium_process = subprocess.Popen([
-        "chromium-browser",
+        "chromium",
         "--kiosk",
         "--noerrdialogs",
         "--disable-infobars",
