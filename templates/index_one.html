@@ -417,7 +417,7 @@
           timeout: 30000, // Increased timeout to 30 seconds
           pingTimeout: 20000, // Increased ping timeout
           pingInterval: 10000, // Send pings every 10 seconds
-          transports: ["websocket", "polling"], // Try websocket first, then polling
+          transports: ["websocket"], // Try websocket first, then polling
           forceNew: false,
           autoConnect: true,
           rememberUpgrade: true,
@@ -539,6 +539,11 @@
 
       // Initialize socket
       const socket = initializeSocket();
+
+      setInterval(() => {
+        document.body.dataset.ping = Date.now();
+      }, 1000);
+
 
       // Update clock
       function updateClock() {
