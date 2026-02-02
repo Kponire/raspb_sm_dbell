@@ -72,7 +72,7 @@ class DeviceServiceLocal:
 
         print("[INFO] Initializing Linphone...")
         self.linphone = LinphoneController(
-            sip_target="6001@10.30.132.143",
+            sip_target="6001@10.228.154.143",
             soundcard_id=5,  # ALSA bcm2835 Headphones
             on_call_end=self.on_call_ended
         )
