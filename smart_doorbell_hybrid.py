@@ -276,6 +276,12 @@ class DeviceServiceLocal:
         time.sleep(3)
         self.set_status("ready", "Monitoring for faces...", person="None", conf=0.0)
 
+        def cleanup(self):
+            print("[INFO] Shutting down service...")
+            self.running = False
+            self.camera.stop_capture()
+            self.linphone.hangup()
+
     # ----------------------------
     # Call Controls
     # ----------------------------
@@ -403,17 +409,24 @@ class TkinterUI:
         self.root.title("Smart Doorbell")
         self.root.attributes("-fullscreen", True)
 
-        # Main layout
+        # Main container
         self.main_frame = tk.Frame(root, bg=BG_COLOR)
         self.main_frame.pack(fill="both", expand=True)
 
+        # Use grid layout
+        self.main_frame.columnconfigure(0, weight=3)  # video area bigger
+        self.main_frame.columnconfigure(1, weight=1)  # status panel smaller
+        self.main_frame.rowconfigure(0, weight=1)
+
+        # Left (video)
         self.left_frame = tk.Frame(self.main_frame, bg=BG_COLOR)
-        self.left_frame.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        self.left_frame.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
 
-        self.right_frame = tk.Frame(self.main_frame, bg=BG_COLOR, width=250)
-        self.right_frame.pack(side="right", fill="y", padx=10, pady=10)
+        # Right (status + buttons)
+        self.right_frame = tk.Frame(self.main_frame, bg=BG_COLOR)
+        self.right_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        # Video
+        # Video label
         self.video_label = tk.Label(self.left_frame, bg="black")
         self.video_label.pack(fill="both", expand=True)
 
@@ -424,82 +437,82 @@ class TkinterUI:
         self.status_title = tk.Label(
             self.status_card,
             text="SMART DOORBELL",
-            font=("Arial", 14, "bold"),
+            font=("Arial", 12, "bold"),
             fg=PRIMARY_COLOR,
             bg=CARD_COLOR
         )
-        self.status_title.pack(anchor="w", padx=10, pady=(10, 0))
+        self.status_title.pack(anchor="w", padx=8, pady=(8, 0))
 
         self.status_message_label = tk.Label(
             self.status_card,
             text="Booting...",
-            font=("Arial", 12),
+            font=("Arial", 10),
             fg=TEXT_COLOR,
             bg=CARD_COLOR,
-            wraplength=220,
+            wraplength=180,
             justify="left"
         )
-        self.status_message_label.pack(anchor="w", padx=10, pady=(5, 10))
+        self.status_message_label.pack(anchor="w", padx=8, pady=(5, 8))
 
         self.person_label = tk.Label(
             self.status_card,
             text="Visitor: None",
-            font=("Arial", 11),
+            font=("Arial", 9),
             fg=MUTED_TEXT,
             bg=CARD_COLOR
         )
-        self.person_label.pack(anchor="w", padx=10)
+        self.person_label.pack(anchor="w", padx=8)
 
         self.conf_label = tk.Label(
             self.status_card,
             text="Confidence: 0%",
-            font=("Arial", 11),
+            font=("Arial", 9),
             fg=MUTED_TEXT,
             bg=CARD_COLOR
         )
-        self.conf_label.pack(anchor="w", padx=10, pady=(0, 10))
+        self.conf_label.pack(anchor="w", padx=8, pady=(0, 8))
 
         # Door label
         self.door_label = tk.Label(
             self.right_frame,
             text="DOOR: LOCKED",
-            font=("Arial", 14, "bold"),
+            font=("Arial", 12, "bold"),
             fg="white",
             bg=PRIMARY_COLOR,
-            padx=10,
-            pady=10
+            padx=8,
+            pady=8
         )
-        self.door_label.pack(fill="x", pady=(0, 10))
+        self.door_label.pack(fill="x", pady=(0, 8))
 
         # Buttons
         self.call_btn = tk.Button(
             self.right_frame,
-            text="📞 CALL OWNER",
-            font=("Arial", 16, "bold"),
+            text="📞 CALL",
+            font=("Arial", 12, "bold"),
             bg=PRIMARY_COLOR,
             fg="white",
             relief="flat",
             height=2,
             command=self.service.initiate_call_to_owner
         )
-        self.call_btn.pack(fill="x", pady=(0, 10))
+        self.call_btn.pack(fill="x", pady=(0, 8))
 
         self.hangup_btn = tk.Button(
             self.right_frame,
-            text="⛔ END CALL",
-            font=("Arial", 16, "bold"),
+            text="⛔ END",
+            font=("Arial", 12, "bold"),
             bg="#444444",
             fg="white",
             relief="flat",
             height=2,
             command=self.service.hangup_call
         )
-        self.hangup_btn.pack(fill="x", pady=(0, 10))
+        self.hangup_btn.pack(fill="x", pady=(0, 8))
 
         self.exit_btn = tk.Button(
             self.right_frame,
             text="EXIT",
-            font=("Arial", 12),
+            font=("Arial", 10),
             bg="#222222",
             fg="white",
             relief="flat",
@@ -508,6 +521,13 @@ class TkinterUI:
         self.exit_btn.pack(fill="x", pady=(20, 0))
 
         self.update_ui()
+
+    def quit_app(self):
+        """Cleanup and force exit."""
+        self.service.cleanup()
+        self.root.quit()
+        self.root.destroy()
+        os._exit(0)
 
     def update_ui(self):
         # Status update
@@ -578,4 +598,8 @@ if __name__ == "__main__":
         time.sleep(0.2)
 
     ui = TkinterUI(root, service)
-    root.mainloop()
+    try:
+        root.mainloop()
+    except KeyboardInterrupt:
+        service.cleanup()
+        os._exit(0)
