@@ -82,9 +82,11 @@ class Recognizer:
                 return
 
             url = f"{self.base_url}/api/watchlist/device/{self.device_id}/embeddings"
+            print(f"[DEBUG] Fetching from: {url}")
             resp = requests.get(url)
             resp.raise_for_status()
             data = resp.json()
+            print(f"[DEBUG] Data received. Parsing {len(data.get('embeddings', []))} items")
             self.embeddings = []
 
             for item in data.get("embeddings", []):
